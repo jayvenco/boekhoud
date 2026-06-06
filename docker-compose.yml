@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   boekhoud_app:
-    build: .
+    build: https://github.com/jayvenco/boekhoud.git
     container_name: boekhoud_app_v3
     ports:
       - "5000:5000"
