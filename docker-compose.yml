@@ -24,7 +24,7 @@ services:
     tmpfs:
       - /tmp
 
-volumes:
-  boekhoud_data:
-  boekhoud_uploads:
-  boekhoud_backups:
+#volumes:
+#  boekhoud_data:
+#  boekhoud_uploads:
+#  boekhoud_backups:
