@@ -8,8 +8,8 @@ services:
       - "5000:5000"
     environment:
       # openssl rand -hex 24
-      - OPENAI_API_KEY=
-      - SECRET_KEY=
+      - OPENAI_API_KEY=your_openai_api_key
+      - SECRET_KEY=vervang_dit_met_een_lange_willekeurige_string
       - FLASK_ENV=production
     volumes:
       # Persistente opslag buiten de container
