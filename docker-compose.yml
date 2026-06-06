@@ -7,14 +7,15 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - OPENAI_API_KEY=your_openai_api_key
-      - SECRET_KEY=vervang_dit_met_een_lange_willekeurige_string
+      # openssl rand -hex 24
+      - OPENAI_API_KEY=
+      - SECRET_KEY=
       - FLASK_ENV=production
     volumes:
       # Persistente opslag buiten de container
-      - boekhoud_data:/app/data
-      - boekhoud_uploads:/app/uploads
-      - boekhoud_backups:/app/backups
+      - /mnt/user/appdata/boekhoud/data:/app/data
+      - /mnt/user/appdata/boekhoud/uploads:/app/uploads
+      - /mnt/user/appdata/boekhoud/backups:/app/backups
     restart: unless-stopped
     # Veiligheid: beperk systeemrechten
     security_opt:
