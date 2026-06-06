@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boekhoud App V3</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#1a1a2e;--ink2:#374151;--muted:#6b7280;
+  --accent:#e8833a;--accent2:#4a90d9;--success:#16a34a;--danger:#dc2626;
+  --surface:#ffffff;--bg:#f8f7f4;--border:#e5e7eb;
+  --nav-bg:#1a1a2e;--nav-w:240px;
+  --shadow:0 1px 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
+  --radius:12px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh}
+
+/* ─ Sidebar ─ */
+.sidebar{
+  width:var(--nav-w);min-height:100vh;background:var(--nav-bg);
+  display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;z-index:100;
+}
+.sidebar-logo{
+  padding:28px 24px 20px;
+  font-family:'DM Serif Display',serif;font-size:1.5rem;color:#ffffff;border-bottom:1px solid rgba(255,255,255,.08);
+}
+.sidebar-logo span{color:var(--accent)}
+.sidebar-user{padding:14px 24px;font-size:.78rem;color:rgba(255,255,255,.45);border-bottom:1px solid rgba(255,255,255,.08)}
+nav{flex:1;padding:16px 0}
+nav a{
+  display:flex;align-items:center;gap:12px;padding:11px 24px;
+  color:rgba(255,255,255,.6);text-decoration:none;font-size:.88rem;font-weight:400;
+  transition:background .15s,color .15s;border-left:3px solid transparent;
+}
+nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+nav a.actief{background:rgba(232,131,58,.12);color:var(--accent);border-left-color:var(--accent)}
+nav a .ico{font-size:1rem;width:20px;text-align:center}
+.sidebar-bottom{padding:20px 24px;border-top:1px solid rgba(255,255,255,.08)}
+.sidebar-bottom a{color:rgba(255,255,255,.45);font-size:.82rem;text-decoration:none}
+.sidebar-bottom a:hover{color:#fff}
+
+/* ─ Main ─ */
+.main{margin-left:var(--nav-w);flex:1;padding:32px 36px;max-width:1200px}
+.page-header{margin-bottom:28px}
+.page-header h1{font-family:'DM Serif Display',serif;font-size:1.9rem;color:var(--ink);font-weight:400}
+.page-header p{color:var(--muted);font-size:.9rem;margin-top:4px}
+
+/* ─ Cards ─ */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px}
+.card-grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:28px}
+.stat-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 24px}
+.stat-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+.stat-value{font-family:'DM Serif Display',serif;font-size:1.8rem;color:var(--ink)}
+.stat-value.positief{color:var(--success)}
+.stat-value.negatief{color:var(--danger)}
+.stat-value.accent{color:var(--accent2)}
+
+/* ─ Flash ─ */
+.flashes{margin-bottom:20px}
+.flash{padding:10px 16px;border-radius:8px;font-size:.875rem;margin-bottom:8px}
+.flash.success{background:#f0fdf4;color:var(--success);border:1px solid #bbf7d0}
+.flash.error{background:#fef2f2;color:var(--danger);border:1px solid #fecaca}
+
+/* ─ Formulieren ─ */
+.form-row{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:4px}
+.form-group{display:flex;flex-direction:column;gap:6px}
+.form-group label{font-size:.78rem;font-weight:500;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.form-group input,.form-group select,.form-group textarea{
+  padding:10px 13px;border:1.5px solid var(--border);border-radius:8px;
+  font-family:'DM Sans',sans-serif;font-size:.9rem;color:var(--ink);
+  background:#fff;transition:border-color .2s;outline:none;
+}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent2)}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;padding:10px 20px;
+  border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:.875rem;
+  font-weight:500;cursor:pointer;transition:background .15s,transform .1s;text-decoration:none;
+}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#d4732e}
+.btn-danger{background:#fef2f2;color:var(--danger);border:1px solid #fecaca}
+.btn-danger:hover{background:#fee2e2}
+.btn-sm{padding:6px 12px;font-size:.8rem}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--ink2)}
+.btn-outline:hover{border-color:var(--accent2);color:var(--accent2)}
+
+/* ─ Tabel ─ */
+.table-wrap{overflow-x:auto;border-radius:var(--radius);box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse;background:var(--surface)}
+thead{background:#f3f4f6}
+th{padding:12px 16px;text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)}
+td{padding:12px 16px;font-size:.875rem;color:var(--ink2);border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafafa}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:.75rem;font-weight:500}
+.badge-inkomst{background:#f0fdf4;color:var(--success)}
+.badge-uitgave{background:#fef2f2;color:var(--danger)}
+
+/* ─ Accordeon (formulier verbergen) ─ */
+.collapsible{border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:24px;overflow:hidden}
+.collapsible-header{
+  background:var(--surface);padding:18px 24px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+  font-weight:500;color:var(--ink);user-select:none;border-bottom:1px solid transparent;
+  transition:background .15s;
+}
+.collapsible-header:hover{background:#f9f9f9}
+.collapsible-header.open{border-bottom-color:var(--border)}
+.collapsible-body{background:var(--surface);padding:24px;display:none}
+.collapsible-body.open{display:block}
+.chevron{transition:transform .2s;color:var(--muted)}
+.collapsible-header.open .chevron{transform:rotate(180deg)}
+
+/* ─ OCR panel ─ */
+#ocr-panel{background:#f0f7ff;border:1.5px solid #bfdbfe;border-radius:var(--radius);padding:20px;margin-bottom:20px;display:none}
+#ocr-panel h3{font-size:.875rem;font-weight:600;color:var(--accent2);margin-bottom:12px}
+#ocr-status{font-size:.83rem;color:var(--muted);margin-top:8px}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent2);border-radius:50%;animation:spin .6s linear infinite;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─ Progress bar afschrijving ─ */
+.progress-bar{background:#e5e7eb;border-radius:999px;height:6px;overflow:hidden;margin-top:6px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:999px;transition:width .3s}
+
+/* ─ Winst/Verlies ─ */
+.wv-sectie{margin-bottom:24px}
+.wv-sectie h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.wv-rij{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:.9rem}
+.wv-rij:last-child{border-bottom:none}
+.wv-totaal{display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-weight:600;font-size:1rem;border-top:2px solid var(--border);margin-top:4px}
+.wv-netto{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--ink);border-radius:var(--radius);color:#fff;font-family:'DM Serif Display',serif;font-size:1.3rem;margin-top:16px}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">Boek<span>houd</span></div>
+  <div class="sidebar-user">{{ gebruikersnaam }}</div>
+  <nav>
+    <a href="{{ url_for('dashboard') }}" class="{{ 'actief' if pagina=='dashboard' }}">
+      <span class="ico">📊</span> Dashboard
+    </a>
+    <a href="{{ url_for('transacties') }}" class="{{ 'actief' if pagina=='transacties' }}">
+      <span class="ico">💳</span> Transacties
+    </a>
+    <a href="{{ url_for('activa') }}" class="{{ 'actief' if pagina=='activa' }}">
+      <span class="ico">🏷️</span> Activa
+    </a>
+    <a href="{{ url_for('winst_verlies') }}" class="{{ 'actief' if pagina=='winst_verlies' }}">
+      <span class="ico">📈</span> Winst & Verlies
+    </a>
+    <a href="{{ url_for('export_excel') }}" style="margin-top:8px">
+      <span class="ico">📥</span> Export naar Excel
+    </a>
+    <a href="{{ url_for('backup_pagina') }}" class="{{ 'actief' if pagina=='backup' }}">
+      <span class="ico">💾</span> Backup & Herstel
+    </a>
+  </nav>
+  <div class="sidebar-bottom">
+    <a href="{{ url_for('logout') }}">↩ Uitloggen</a>
+  </div>
+</aside>
+
+<!-- Main content -->
+<main class="main">
+
+  <!-- Flash berichten -->
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+  {% if msgs %}
+  <div class="flashes">
+    {% for cat, msg in msgs %}
+    <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <!-- ══════════ DASHBOARD ══════════ -->
+  {% if pagina == 'dashboard' %}
+  <div class="page-header">
+    <h1>Dashboard</h1>
+    <p>Financieel overzicht van uw onderneming</p>
+  </div>
+
+  <div class="card-grid">
+    <div class="stat-card">
+      <div class="stat-label">Totale inkomsten</div>
+      <div class="stat-value positief">€{{ "%.2f"|format(inkomsten) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Totale uitgaven</div>
+      <div class="stat-value negatief">€{{ "%.2f"|format(uitgaven) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Netto winst</div>
+      <div class="stat-value {{ 'positief' if winst >= 0 else 'negatief' }}">€{{ "%.2f"|format(winst) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Totale afschrijvingen</div>
+      <div class="stat-value accent">€{{ "%.2f"|format(totaal_afschrijving) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Boekwaarde activa</div>
+      <div class="stat-value">€{{ "%.2f"|format(totaal_restwaarde) }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:16px;font-weight:400">Recente transacties</h2>
+    {% if recente_transacties %}
+    <div class="table-wrap" style="box-shadow:none">
+    <table>
+      <thead><tr><th>Datum</th><th>Omschrijving</th><th>Categorie</th><th>Type</th><th>Bedrag</th></tr></thead>
+      <tbody>
+      {% for t in recente_transacties %}
+      <tr>
+        <td>{{ t.datum }}</td>
+        <td>{{ t.omschrijving }}</td>
+        <td>{{ t.categorie }}</td>
+        <td><span class="badge badge-{{ t.type }}">{{ t.type|capitalize }}</span></td>
+        <td>€{{ "%.2f"|format(t.bedrag) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:.9rem">Nog geen transacties ingevoerd.</p>
+    {% endif %}
+  </div>
+
+  <!-- ══════════ TRANSACTIES ══════════ -->
+  {% elif pagina == 'transacties' %}
+  <div class="page-header">
+    <h1>Transacties</h1>
+    <p>Beheer uw inkomsten en uitgaven</p>
+  </div>
+
+  <!-- OCR panel -->
+  <div id="ocr-panel">
+    <h3>🤖 AI OCR Resultaat</h3>
+    <div id="ocr-resultaat"></div>
+    <div id="ocr-status"></div>
+  </div>
+
+  <!-- Formulier toevoegen -->
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="toggleCollapse(this)">
+      + Nieuwe transactie toevoegen
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body">
+      <form method="POST" action="{{ url_for('transactie_toevoegen') }}" enctype="multipart/form-data" id="transactie-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Datum *</label>
+            <input type="date" name="datum" required value="{{ today }}">
+          </div>
+          <div class="form-group">
+            <label>Factuurnummer</label>
+            <input type="text" name="factuurnummer" placeholder="INV-2024-001" maxlength="50">
+          </div>
+          <div class="form-group">
+            <label>Type *</label>
+            <select name="type" required>
+              <option value="inkomst">Inkomst</option>
+              <option value="uitgave">Uitgave</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Categorie *</label>
+            <select name="categorie" required>
+              {% for cat in categorieen %}
+              <option value="{{ cat }}">{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="grid-column:1/-2">
+            <label>Omschrijving *</label>
+            <input type="text" name="omschrijving" required placeholder="Beschrijving van de transactie" maxlength="500" id="omschrijving-input">
+          </div>
+          <div class="form-group">
+            <label>Bedrag (€) *</label>
+            <input type="number" name="bedrag" required step="0.01" min="0" max="999999999" placeholder="0.00" id="bedrag-input">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:8px;align-items:end">
+          <div class="form-group">
+            <label>Bon / Factuur uploaden</label>
+            <input type="file" name="bon" accept=".pdf,.jpg,.jpeg,.png" id="bon-input" onchange="handleBestandUpload(this)">
+          </div>
+          <div style="display:flex;gap:10px;padding-bottom:2px">
+            <button type="submit" class="btn btn-primary">Toevoegen</button>
+          </div>
+        </div>
+        <div id="ocr-inline" style="margin-top:8px;font-size:.8rem;color:var(--muted)"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Transactietabel -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th><th>Factuurnr.</th><th>Omschrijving</th>
+          <th>Categorie</th><th>Type</th><th>Bedrag</th><th>Bon</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for t in transacties %}
+      <tr>
+        <td>{{ t.datum }}</td>
+        <td style="font-size:.8rem;color:var(--muted)">{{ t.factuurnummer or '–' }}</td>
+        <td>{{ t.omschrijving }}</td>
+        <td>{{ t.categorie }}</td>
+        <td><span class="badge badge-{{ t.type }}">{{ t.type|capitalize }}</span></td>
+        <td style="font-weight:500">€{{ "%.2f"|format(t.bedrag) }}</td>
+        <td>
+          {% if t.bestand_pad %}
+          <span style="font-size:.8rem;color:var(--accent2)">📎 Bijlage</span>
+          {% else %}–{% endif %}
+        </td>
+        <td>
+          <form method="POST" action="{{ url_for('transactie_verwijderen', tid=t.id) }}" onsubmit="return confirm('Transactie verwijderen?')">
+            <button type="submit" class="btn btn-danger btn-sm">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px">Geen transacties gevonden.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══════════ ACTIVA ══════════ -->
+  {% elif pagina == 'activa' %}
+  <div class="page-header">
+    <h1>Activa & Afschrijvingen</h1>
+    <p>Beheer vaste activa en lineaire afschrijvingen</p>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="toggleCollapse(this)">
+      + Nieuw activum toevoegen
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body">
+      <form method="POST" action="{{ url_for('activum_toevoegen') }}">
+        <div class="form-row">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Naam *</label>
+            <input type="text" name="naam" required placeholder="bijv. Laptop, Auto, Apparatuur" maxlength="200">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Aanschafdatum *</label>
+            <input type="date" name="aanschafdatum" required>
+          </div>
+          <div class="form-group">
+            <label>Aanschafwaarde (€) *</label>
+            <input type="number" name="aanschafwaarde" required step="0.01" min="0" placeholder="10000.00">
+          </div>
+          <div class="form-group">
+            <label>Restwaarde (€) *</label>
+            <input type="number" name="restwaarde" required step="0.01" min="0" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>Levensduur (jaren) *</label>
+            <input type="number" name="levensduur_jaren" required min="1" max="50" placeholder="5">
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <button type="submit" class="btn btn-primary">Activum toevoegen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Naam</th><th>Aanschafdatum</th><th>Aanschafwaarde</th>
+          <th>Jaarl. afschr.</th><th>Afgeschreven</th><th>Boekwaarde</th>
+          <th>Resterend</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for a in activa %}
+      <tr>
+        <td style="font-weight:500">{{ a.naam }}</td>
+        <td>{{ a.aanschafdatum }}</td>
+        <td>€{{ "%.2f"|format(a.aanschafwaarde) }}</td>
+        <td>€{{ "%.2f"|format(a.jaarlijkse_afschrijving) }}</td>
+        <td>
+          €{{ "%.2f"|format(a.totaal_afgeschreven) }}
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:{{ [(a.totaal_afgeschreven / a.aanschafwaarde * 100) if a.aanschafwaarde > 0 else 0, 100]|min|int }}%"></div>
+          </div>
+        </td>
+        <td style="font-weight:600">€{{ "%.2f"|format(a.boekwaarde) }}</td>
+        <td style="font-size:.82rem;color:var(--muted)">{{ a.jaren_resterend }} jr</td>
+        <td>
+          <form method="POST" action="{{ url_for('activum_verwijderen', aid=a.id) }}" onsubmit="return confirm('Activum verwijderen?')">
+            <button type="submit" class="btn btn-danger btn-sm">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px">Geen activa ingevoerd.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══════════ WINST & VERLIES ══════════ -->
+  {% elif pagina == 'winst_verlies' %}
+  <div class="page-header">
+    <h1>Winst & Verlies</h1>
+    <p>Financieel overzicht per jaar</p>
+  </div>
+
+  <div style="margin-bottom:24px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    {% for j in jaren %}
+    <a href="{{ url_for('winst_verlies', jaar=j) }}"
+       class="btn {{ 'btn-primary' if j == geselecteerd_jaar else 'btn-outline' }} btn-sm">
+      {{ j }}
+    </a>
+    {% endfor %}
+  </div>
+
+  <div style="display:grid;gap:24px;grid-template-columns:1fr 1fr">
+    <!-- Inkomsten -->
+    <div class="card">
+      <div class="wv-sectie">
+        <h2>Inkomsten</h2>
+        {% for r in inkomsten_rows %}
+        <div class="wv-rij">
+          <span>{{ r.categorie }}</span>
+          <span style="color:var(--success);font-weight:500">€{{ "%.2f"|format(r.totaal) }}</span>
+        </div>
+        {% else %}
+        <p style="color:var(--muted);font-size:.875rem">Geen inkomsten in {{ geselecteerd_jaar }}.</p>
+        {% endfor %}
+        <div class="wv-totaal">
+          <span>Totaal inkomsten</span>
+          <span style="color:var(--success)">€{{ "%.2f"|format(totaal_inkomsten) }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Uitgaven -->
+    <div class="card">
+      <div class="wv-sectie">
+        <h2>Uitgaven</h2>
+        {% for r in uitgaven_rows %}
+        <div class="wv-rij">
+          <span>{{ r.categorie }}</span>
+          <span style="color:var(--danger);font-weight:500">€{{ "%.2f"|format(r.totaal) }}</span>
+        </div>
+        {% else %}
+        <p style="color:var(--muted);font-size:.875rem">Geen uitgaven in {{ geselecteerd_jaar }}.</p>
+        {% endfor %}
+        <div class="wv-totaal">
+          <span>Totaal uitgaven</span>
+          <span style="color:var(--danger)">€{{ "%.2f"|format(totaal_uitgaven) }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Netto resultaat -->
+  <div class="card" style="margin-top:24px">
+    <div class="wv-sectie">
+      <h2>Resultatenberekening {{ geselecteerd_jaar }}</h2>
+      <div class="wv-rij"><span>Bruto resultaat</span><span>€{{ "%.2f"|format(totaal_inkomsten - totaal_uitgaven) }}</span></div>
+      <div class="wv-rij"><span>Afschrijvingen activa</span><span style="color:var(--danger)">– €{{ "%.2f"|format(afschrijvingen_jaar) }}</span></div>
+    </div>
+    <div class="wv-netto">
+      <span>Netto winst {{ geselecteerd_jaar }}</span>
+      <span style="color:{{ '#4ade80' if winst >= 0 else '#f87171' }}">€{{ "%.2f"|format(winst) }}</span>
+    </div>
+  </div>
+
+  <!-- ══════════ BACKUP ══════════ -->
+  {% elif pagina == 'backup' %}
+  <div class="page-header">
+    <h1>Backup & Herstel</h1>
+    <p>Maak een volledige backup van uw database en geüploade bestanden</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.15rem;font-weight:400;margin-bottom:12px">Nieuwe backup maken</h2>
+    <p style="color:var(--muted);font-size:.875rem;margin-bottom:16px">
+      De backup bevat de volledige database (alle transacties en activa) én alle geüploade bonnen en facturen, verpakt als één ZIP-bestand.
+    </p>
+    <form method="POST" action="{{ url_for('backup_maken') }}">
+      <button type="submit" class="btn btn-primary">💾 Backup nu maken</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.15rem;font-weight:400;margin-bottom:16px">Beschikbare backups</h2>
+    {% if backups %}
+    <div class="table-wrap" style="box-shadow:none">
+    <table>
+      <thead>
+        <tr><th>Bestandsnaam</th><th>Datum</th><th>Tijd</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for naam in backups %}
+      {% set delen = naam.replace('backup_','').replace('.zip','').split('_') %}
+      <tr>
+        <td style="font-size:.875rem;font-family:monospace">{{ naam }}</td>
+        <td>{{ delen[0][:4] }}-{{ delen[0][4:6] }}-{{ delen[0][6:] }}</td>
+        <td>{{ delen[1][:2] }}:{{ delen[1][2:4] }}:{{ delen[1][4:] }}</td>
+        <td style="display:flex;gap:8px">
+          <a href="{{ url_for('backup_downloaden', naam=naam) }}" class="btn btn-outline btn-sm">⬇ Download</a>
+          <form method="POST" action="{{ url_for('backup_verwijderen', naam=naam) }}" onsubmit="return confirm('Backup permanent verwijderen?')">
+            <button type="submit" class="btn btn-danger btn-sm">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:.9rem">Nog geen backups beschikbaar. Klik op "Backup nu maken" om te beginnen.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</main>
+
+<script>
+// Collapsible
+function toggleCollapse(header){
+  header.classList.toggle('open');
+  const body=header.nextElementSibling;
+  body.classList.toggle('open');
+}
+
+// Datum invullen
+document.querySelectorAll('input[type=date]').forEach(el=>{
+  if(!el.value) el.value=new Date().toISOString().split('T')[0];
+});
+
+// OCR bij bestand selecteren
+function handleBestandUpload(input){
+  const bestand=input.files[0];
+  if(!bestand) return;
+  const ext=bestand.name.split('.').pop().toLowerCase();
+  if(!['pdf','jpg','jpeg','png'].includes(ext)) return;
+  if(bestand.size>5*1024*1024){
+    document.getElementById('ocr-inline').textContent='Bestand te groot voor OCR (max 5 MB)';
+    return;
+  }
+
+  const status=document.getElementById('ocr-inline');
+  status.innerHTML='<span class="spinner"></span> OCR verwerken...';
+
+  const fd=new FormData();
+  fd.append('bestand',bestand);
+
+  fetch('/ocr',{method:'POST',body:fd})
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.error){
+        status.textContent='OCR: '+data.error;
+        return;
+      }
+      // Vul formuliervelden in
+      if(data.omschrijving && document.getElementById('omschrijving-input'))
+        document.getElementById('omschrijving-input').value=data.omschrijving;
+      if(data.totaalbedrag && document.getElementById('bedrag-input'))
+        document.getElementById('bedrag-input').value=data.totaalbedrag.toFixed(2);
+      if(data.factuurnummer)
+        document.querySelector('input[name=factuurnummer]').value=data.factuurnummer;
+      if(data.datum) document.querySelector('input[name=datum]').value=data.datum;
+      if(data.categorie){
+        const sel=document.querySelector('select[name=categorie]');
+        [...sel.options].forEach(o=>{ if(o.value===data.categorie) o.selected=true; });
+      }
+
+      // Toon panel
+      const panel=document.getElementById('ocr-panel');
+      panel.style.display='block';
+      document.getElementById('ocr-resultaat').innerHTML=`
+        <strong>${data.leverancier||'–'}</strong> &nbsp;|&nbsp;
+        Factuur: ${data.factuurnummer||'–'} &nbsp;|&nbsp;
+        BTW: €${(data.btw||0).toFixed(2)} &nbsp;|&nbsp;
+        Totaal: €${(data.totaalbedrag||0).toFixed(2)} &nbsp;|&nbsp;
+        Datum: ${data.datum||'–'}
+      `;
+      status.textContent='✓ OCR velden ingevuld';
+    })
+    .catch(()=>{ status.textContent='OCR niet beschikbaar.'; });
+}
+</script>
+</body>
+</html>
