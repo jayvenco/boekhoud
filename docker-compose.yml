@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  boekhoud_app:
+    build: .
+    container_name: boekhoud_app_v3
+    ports:
+      - "5000:5000"
+    environment:
+      # openssl rand -hex 24
+      - OPENAI_API_KEY=
+      - SECRET_KEY=
+      - FLASK_ENV=production
+    volumes:
+      # Persistente opslag buiten de container
+      - /mnt/user/appdata/boekhoud/data:/app/data
+      - /mnt/user/appdata/boekhoud/uploads:/app/uploads
+      - /mnt/user/appdata/boekhoud/backups:/app/backups
+    restart: unless-stopped
+    # Veiligheid: beperk systeemrechten
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+
+#volumes:
+#  boekhoud_data:
+#  boekhoud_uploads:
+#  boekhoud_backups:
