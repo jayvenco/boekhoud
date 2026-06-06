@@ -54,7 +54,7 @@ DATA_DIR.mkdir(exist_ok=True)
 UPLOAD_BASE.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
-ALLOWED_CATEGORIES = ["Kantoor", "Marketing", "Transport", "Investering", "Overig"]
+ALLOWED_CATEGORIES = ["Kantoor", "Marketing", "Transport", "Investering", "Vaste Lasten", "Gebruiksartikelen", "Overig"]
 
 for cat in ALLOWED_CATEGORIES:
     (UPLOAD_BASE / cat).mkdir(exist_ok=True)
@@ -225,6 +225,34 @@ def dashboard():
         "SELECT * FROM transacties ORDER BY datum DESC, id DESC LIMIT 5"
     ).fetchall()
 
+    # ── Grafiekdata: maandelijks huidig jaar ──
+    huidig_jaar = str(date.today().year)
+    maand_ink = {r["maand"]: r["totaal"] for r in db.execute(
+        "SELECT strftime('%m',datum) as maand, SUM(bedrag) as totaal "
+        "FROM transacties WHERE type='inkomst' AND strftime('%Y',datum)=? GROUP BY maand",
+        (huidig_jaar,)
+    ).fetchall()}
+    maand_uit = {r["maand"]: r["totaal"] for r in db.execute(
+        "SELECT strftime('%m',datum) as maand, SUM(bedrag) as totaal "
+        "FROM transacties WHERE type='uitgave' AND strftime('%Y',datum)=? GROUP BY maand",
+        (huidig_jaar,)
+    ).fetchall()}
+
+    maanden_labels = ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"]
+    chart_inkomsten = [round(maand_ink.get(f"{m:02d}", 0), 2) for m in range(1, 13)]
+    chart_uitgaven  = [round(maand_uit.get(f"{m:02d}", 0), 2) for m in range(1, 13)]
+    chart_winst     = [round(chart_inkomsten[i] - chart_uitgaven[i], 2) for i in range(12)]
+
+    # ── Grafiekdata: per categorie (taart) ──
+    cat_data = db.execute(
+        "SELECT categorie, SUM(bedrag) as totaal FROM transacties "
+        "WHERE type='uitgave' AND strftime('%Y',datum)=? GROUP BY categorie ORDER BY totaal DESC",
+        (huidig_jaar,)
+    ).fetchall()
+    cat_labels  = [r["categorie"] for r in cat_data]
+    cat_totalen = [round(r["totaal"], 2) for r in cat_data]
+
+    import json
     return render_template("index.html",
         pagina="dashboard",
         inkomsten=inkomsten,
@@ -233,7 +261,14 @@ def dashboard():
         totaal_afschrijving=round(totaal_afschrijving, 2),
         totaal_restwaarde=round(totaal_restwaarde, 2),
         recente_transacties=recente,
-        gebruikersnaam=session.get("gebruikersnaam")
+        gebruikersnaam=session.get("gebruikersnaam"),
+        huidig_jaar=huidig_jaar,
+        chart_labels=json.dumps(maanden_labels),
+        chart_inkomsten=json.dumps(chart_inkomsten),
+        chart_uitgaven=json.dumps(chart_uitgaven),
+        chart_winst=json.dumps(chart_winst),
+        cat_labels=json.dumps(cat_labels),
+        cat_totalen=json.dumps(cat_totalen),
     )
 
 # ── Routes: Transacties ───────────────────────────────────────────────────────
@@ -739,6 +774,111 @@ def backup_verwijderen(naam):
         pad.unlink()
         flash(f"Backup verwijderd: {naam}", "success")
     return redirect(url_for("backup_pagina"))
+
+
+
+# ── Routes: Transactie bewerken ──────────────────────────────────────────────
+@app.route("/transactie/bewerken/<int:tid>", methods=["GET", "POST"])
+@login_vereist
+def transactie_bewerken(tid):
+    db = get_db()
+    transactie = db.execute("SELECT * FROM transacties WHERE id=?", (tid,)).fetchone()
+    if not transactie:
+        abort(404)
+
+    if request.method == "POST":
+        try:
+            datum = validate_datum(request.form.get("datum", ""))
+            factuurnummer = sanitize(request.form.get("factuurnummer", ""), 50)
+            omschrijving = sanitize(request.form.get("omschrijving", ""), 500)
+            bedrag = validate_bedrag(request.form.get("bedrag", "0"))
+            transactie_type = request.form.get("type", "")
+            categorie = validate_categorie(request.form.get("categorie", ""))
+
+            if transactie_type not in ("inkomst", "uitgave"):
+                flash("Ongeldig transactietype.", "error")
+                return redirect(url_for("transactie_bewerken", tid=tid))
+            if not omschrijving:
+                flash("Omschrijving is verplicht.", "error")
+                return redirect(url_for("transactie_bewerken", tid=tid))
+
+            # Nieuw bestand uploaden (optioneel)
+            bestand_pad = transactie["bestand_pad"]
+            if "bon" in request.files:
+                bestand = request.files["bon"]
+                if bestand and bestand.filename and allowed_file(bestand.filename):
+                    # Verwijder oud bestand
+                    if bestand_pad:
+                        oud = UPLOAD_BASE / bestand_pad
+                        if oud.exists():
+                            oud.unlink()
+                    ext = bestand.filename.rsplit(".", 1)[1].lower()
+                    veilige_naam = f"{uuid.uuid4().hex}.{ext}"
+                    doel = UPLOAD_BASE / categorie / veilige_naam
+                    bestand.save(str(doel))
+                    bestand_pad = f"{categorie}/{veilige_naam}"
+
+            db.execute(
+                """UPDATE transacties SET datum=?, factuurnummer=?, omschrijving=?,
+                   bedrag=?, type=?, categorie=?, bestand_pad=? WHERE id=?""",
+                (datum, factuurnummer, omschrijving, bedrag, transactie_type, categorie, bestand_pad, tid)
+            )
+            db.commit()
+            flash("Transactie bijgewerkt.", "success")
+            return redirect(url_for("transacties"))
+
+        except ValueError as e:
+            flash(f"Invoerfout: {e}", "error")
+
+    return render_template("index.html", pagina="transactie_bewerken",
+                           transactie=transactie,
+                           categorieen=ALLOWED_CATEGORIES,
+                           gebruikersnaam=session.get("gebruikersnaam"))
+
+
+# ── Routes: Instellingen / wachtwoord wijzigen ────────────────────────────────
+@app.route("/instellingen")
+@login_vereist
+def instellingen():
+    return render_template("index.html", pagina="instellingen",
+                           gebruikersnaam=session.get("gebruikersnaam"))
+
+@app.route("/instellingen/wachtwoord", methods=["POST"])
+@login_vereist
+def wachtwoord_wijzigen():
+    huidig = request.form.get("huidig_wachtwoord", "")
+    nieuw = request.form.get("nieuw_wachtwoord", "")
+    bevestig = request.form.get("bevestig_wachtwoord", "")
+
+    if not huidig or not nieuw or not bevestig:
+        flash("Vul alle velden in.", "error")
+        return redirect(url_for("instellingen"))
+
+    if len(nieuw) < 8:
+        flash("Nieuw wachtwoord moet minimaal 8 tekens zijn.", "error")
+        return redirect(url_for("instellingen"))
+
+    if nieuw != bevestig:
+        flash("Nieuw wachtwoord en bevestiging komen niet overeen.", "error")
+        return redirect(url_for("instellingen"))
+
+    db = get_db()
+    gebruiker = db.execute(
+        "SELECT wachtwoord_hash FROM gebruikers WHERE id=?", (session["gebruiker_id"],)
+    ).fetchone()
+
+    if not gebruiker or not check_password_hash(gebruiker["wachtwoord_hash"], huidig):
+        flash("Huidig wachtwoord is onjuist.", "error")
+        return redirect(url_for("instellingen"))
+
+    db.execute(
+        "UPDATE gebruikers SET wachtwoord_hash=? WHERE id=?",
+        (generate_password_hash(nieuw), session["gebruiker_id"])
+    )
+    db.commit()
+    logger.info("Wachtwoord gewijzigd voor gebruiker id=%s", session["gebruiker_id"])
+    flash("Wachtwoord succesvol gewijzigd.", "success")
+    return redirect(url_for("instellingen"))
 
 
 # ── App start ─────────────────────────────────────────────────────────────────

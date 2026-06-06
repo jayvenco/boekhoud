@@ -158,6 +158,9 @@ tr:hover td{background:#fafafa}
     <a href="{{ url_for('backup_pagina') }}" class="{{ 'actief' if pagina=='backup' }}">
       <span class="ico">💾</span> Backup & Herstel
     </a>
+    <a href="{{ url_for('instellingen') }}" class="{{ 'actief' if pagina=='instellingen' }}" style="margin-top:8px">
+      <span class="ico">⚙️</span> Instellingen
+    </a>
   </nav>
   <div class="sidebar-bottom">
     <a href="{{ url_for('logout') }}">↩ Uitloggen</a>
@@ -182,7 +185,7 @@ tr:hover td{background:#fafafa}
   {% if pagina == 'dashboard' %}
   <div class="page-header">
     <h1>Dashboard</h1>
-    <p>Financieel overzicht van uw onderneming</p>
+    <p>Financieel overzicht {{ huidig_jaar }}</p>
   </div>
 
   <div class="card-grid">
@@ -208,29 +211,163 @@ tr:hover td{background:#fafafa}
     </div>
   </div>
 
-  <div class="card">
-    <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:16px;font-weight:400">Recente transacties</h2>
-    {% if recente_transacties %}
-    <div class="table-wrap" style="box-shadow:none">
-    <table>
-      <thead><tr><th>Datum</th><th>Omschrijving</th><th>Categorie</th><th>Type</th><th>Bedrag</th></tr></thead>
-      <tbody>
-      {% for t in recente_transacties %}
-      <tr>
-        <td>{{ t.datum }}</td>
-        <td>{{ t.omschrijving }}</td>
-        <td>{{ t.categorie }}</td>
-        <td><span class="badge badge-{{ t.type }}">{{ t.type|capitalize }}</span></td>
-        <td>€{{ "%.2f"|format(t.bedrag) }}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+  <!-- Grafieken rij 1: balk + lijn -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="card">
+      <div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:14px;font-weight:600">
+        Inkomsten vs Uitgaven per maand
+      </div>
+      <canvas id="balkGrafiek" height="200"></canvas>
     </div>
-    {% else %}
-    <p style="color:var(--muted);font-size:.9rem">Nog geen transacties ingevoerd.</p>
-    {% endif %}
+    <div class="card">
+      <div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:14px;font-weight:600">
+        Omzet & Winst — lijnverloop
+      </div>
+      <canvas id="lijnGrafiek" height="200"></canvas>
+    </div>
   </div>
+
+  <!-- Grafieken rij 2: taart + recente transacties -->
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;margin-bottom:20px">
+    <div class="card" style="display:flex;flex-direction:column;align-items:center">
+      <div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:14px;font-weight:600;align-self:flex-start">
+        Uitgaven per categorie
+      </div>
+      <canvas id="taartGrafiek" width="220" height="220"></canvas>
+      <div id="taart-legenda" style="margin-top:12px;width:100%"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-family:'DM Serif Display',serif;font-size:1.1rem;margin-bottom:14px;font-weight:400">Recente transacties</h2>
+      {% if recente_transacties %}
+      <div class="table-wrap" style="box-shadow:none">
+      <table>
+        <thead><tr><th>Datum</th><th>Omschrijving</th><th>Categorie</th><th>Type</th><th>Bedrag</th></tr></thead>
+        <tbody>
+        {% for t in recente_transacties %}
+        <tr>
+          <td>{{ t.datum }}</td>
+          <td>{{ t.omschrijving }}</td>
+          <td>{{ t.categorie }}</td>
+          <td><span class="badge badge-{{ t.type }}">{{ t.type|capitalize }}</span></td>
+          <td>€{{ "%.2f"|format(t.bedrag) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:.9rem">Nog geen transacties ingevoerd.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Chart.js laden -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script>
+  const labels    = {{ chart_labels|safe }};
+  const inkData   = {{ chart_inkomsten|safe }};
+  const uitData   = {{ chart_uitgaven|safe }};
+  const winstData = {{ chart_winst|safe }};
+  const catLabels = {{ cat_labels|safe }};
+  const catData   = {{ cat_totalen|safe }};
+
+  const GROEN  = 'rgba(22,163,74,0.85)';
+  const ROOD   = 'rgba(220,38,38,0.85)';
+  const GROEN2 = 'rgba(22,163,74,1)';
+  const ORANJE = 'rgba(232,131,58,1)';
+  const GROEN_L= 'rgba(22,163,74,0.12)';
+  const ORANJE_L='rgba(232,131,58,0.1)';
+
+  const PALETTE = ['#4a90d9','#e8833a','#16a34a','#9333ea','#f59e0b','#dc2626','#06b6d4','#84cc16'];
+
+  const tickEuro = v => '€' + v.toLocaleString('nl-NL');
+
+  // ── Balkgrafiek ──
+  new Chart(document.getElementById('balkGrafiek'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'Inkomsten', data:inkData, backgroundColor:GROEN, borderRadius:4, borderSkipped:false },
+        { label:'Uitgaven',  data:uitData, backgroundColor:ROOD,  borderRadius:4, borderSkipped:false }
+      ]
+    },
+    options: {
+      responsive:true, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}} },
+      scales:{
+        x:{ grid:{display:false}, ticks:{font:{size:10}} },
+        y:{ grid:{color:'#f3f4f6'}, ticks:{font:{size:10}, callback:tickEuro }, beginAtZero:true }
+      }
+    }
+  });
+
+  // ── Lijngrafiek ──
+  new Chart(document.getElementById('lijnGrafiek'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label:'Omzet (inkomsten)', data:inkData,
+          borderColor:GROEN2, backgroundColor:GROEN_L,
+          borderWidth:2.5, pointRadius:4, pointHoverRadius:6,
+          tension:0.35, fill:true
+        },
+        {
+          label:'Winst/verlies', data:winstData,
+          borderColor:ORANJE, backgroundColor:ORANJE_L,
+          borderWidth:2.5, pointRadius:4, pointHoverRadius:6,
+          tension:0.35, fill:true,
+          borderDash: winstData.some(v=>v<0) ? [] : []
+        }
+      ]
+    },
+    options: {
+      responsive:true, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}} },
+      scales:{
+        x:{ grid:{display:false}, ticks:{font:{size:10}} },
+        y:{ grid:{color:'#f3f4f6'}, ticks:{font:{size:10}, callback:tickEuro } }
+      }
+    }
+  });
+
+  // ── Taartgrafiek ──
+  if(catData.length > 0){
+    new Chart(document.getElementById('taartGrafiek'), {
+      type:'doughnut',
+      data:{
+        labels:catLabels,
+        datasets:[{ data:catData, backgroundColor:PALETTE, borderWidth:2, borderColor:'#fff', hoverOffset:6 }]
+      },
+      options:{
+        responsive:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{ callbacks:{ label: ctx => ' €' + ctx.parsed.toLocaleString('nl-NL',{minimumFractionDigits:2}) } }
+        },
+        cutout:'62%'
+      }
+    });
+
+    // Handmatige legenda
+    const leg = document.getElementById('taart-legenda');
+    const totaal = catData.reduce((a,b)=>a+b,0);
+    catLabels.forEach((lbl,i)=>{
+      const pct = totaal > 0 ? ((catData[i]/totaal)*100).toFixed(1) : '0.0';
+      leg.innerHTML += `<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:.78rem">
+        <span style="width:10px;height:10px;border-radius:2px;background:${PALETTE[i%PALETTE.length]};flex-shrink:0"></span>
+        <span style="flex:1;color:var(--ink2)">${lbl}</span>
+        <span style="color:var(--muted)">${pct}%</span>
+      </div>`;
+    });
+  } else {
+    document.getElementById('taartGrafiek').parentElement.innerHTML +=
+      '<p style="color:var(--muted);font-size:.85rem;text-align:center;margin-top:12px">Nog geen uitgaven dit jaar.</p>';
+  }
+  </script>
 
   <!-- ══════════ TRANSACTIES ══════════ -->
   {% elif pagina == 'transacties' %}
@@ -327,9 +464,12 @@ tr:hover td{background:#fafafa}
           {% else %}–{% endif %}
         </td>
         <td>
+          <div style="display:flex;gap:6px">
+          <a href="{{ url_for('transactie_bewerken', tid=t.id) }}" class="btn btn-outline btn-sm">✏️</a>
           <form method="POST" action="{{ url_for('transactie_verwijderen', tid=t.id) }}" onsubmit="return confirm('Transactie verwijderen?')">
             <button type="submit" class="btn btn-danger btn-sm">✕</button>
           </form>
+          </div>
         </td>
       </tr>
       {% else %}
@@ -537,6 +677,106 @@ tr:hover td{background:#fafafa}
     <p style="color:var(--muted);font-size:.9rem">Nog geen backups beschikbaar. Klik op "Backup nu maken" om te beginnen.</p>
     {% endif %}
   </div>
+
+  <!-- ══════════ TRANSACTIE BEWERKEN ══════════ -->
+  {% elif pagina == 'transactie_bewerken' %}
+  <div class="page-header">
+    <h1>Transactie bewerken</h1>
+    <p>Wijzig de gegevens van transactie #{{ transactie.id }}</p>
+  </div>
+
+  <div class="card" style="max-width:760px">
+    <form method="POST" action="{{ url_for('transactie_bewerken', tid=transactie.id) }}" enctype="multipart/form-data">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Datum *</label>
+          <input type="date" name="datum" required value="{{ transactie.datum }}">
+        </div>
+        <div class="form-group">
+          <label>Factuurnummer</label>
+          <input type="text" name="factuurnummer" value="{{ transactie.factuurnummer or '' }}" maxlength="50">
+        </div>
+        <div class="form-group">
+          <label>Type *</label>
+          <select name="type" required>
+            <option value="inkomst" {{ 'selected' if transactie.type == 'inkomst' }}>Inkomst</option>
+            <option value="uitgave" {{ 'selected' if transactie.type == 'uitgave' }}>Uitgave</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Categorie *</label>
+          <select name="categorie" required>
+            {% for cat in categorieen %}
+            <option value="{{ cat }}" {{ 'selected' if transactie.categorie == cat }}>{{ cat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="grid-column:1/-2">
+          <label>Omschrijving *</label>
+          <input type="text" name="omschrijving" required value="{{ transactie.omschrijving }}" maxlength="500">
+        </div>
+        <div class="form-group">
+          <label>Bedrag (€) *</label>
+          <input type="number" name="bedrag" required step="0.01" min="0" value="{{ transactie.bedrag }}">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:8px">
+        <label>Bon vervangen (optioneel)</label>
+        <input type="file" name="bon" accept=".pdf,.jpg,.jpeg,.png">
+        {% if transactie.bestand_pad %}
+        <span style="font-size:.8rem;color:var(--accent2);margin-top:4px">📎 Huidige bijlage: {{ transactie.bestand_pad }}</span>
+        {% endif %}
+      </div>
+      <div style="display:flex;gap:12px;margin-top:20px">
+        <button type="submit" class="btn btn-primary">Opslaan</button>
+        <a href="{{ url_for('transacties') }}" class="btn btn-outline">Annuleren</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- ══════════ INSTELLINGEN ══════════ -->
+  {% elif pagina == 'instellingen' %}
+  <div class="page-header">
+    <h1>Instellingen</h1>
+    <p>Beheer uw accountinstellingen</p>
+  </div>
+
+  <div class="card" style="max-width:480px">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.15rem;font-weight:400;margin-bottom:6px">Wachtwoord wijzigen</h2>
+    <p style="color:var(--muted);font-size:.875rem;margin-bottom:20px">Kies een sterk wachtwoord van minimaal 8 tekens.</p>
+
+    <form method="POST" action="{{ url_for('wachtwoord_wijzigen') }}">
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Huidig wachtwoord</label>
+        <input type="password" name="huidig_wachtwoord" required autocomplete="current-password">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Nieuw wachtwoord</label>
+        <input type="password" name="nieuw_wachtwoord" required autocomplete="new-password" minlength="8" id="nieuw-pw">
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label>Bevestig nieuw wachtwoord</label>
+        <input type="password" name="bevestig_wachtwoord" required autocomplete="new-password" minlength="8" id="bevestig-pw">
+        <span id="pw-match" style="font-size:.78rem;margin-top:4px;display:block"></span>
+      </div>
+      <button type="submit" class="btn btn-primary">Wachtwoord opslaan</button>
+    </form>
+  </div>
+
+  <script>
+  ['nieuw-pw','bevestig-pw'].forEach(id=>{
+    document.getElementById(id).addEventListener('input',()=>{
+      const a=document.getElementById('nieuw-pw').value;
+      const b=document.getElementById('bevestig-pw').value;
+      const el=document.getElementById('pw-match');
+      if(!b){el.textContent='';return;}
+      if(a===b){el.textContent='✓ Wachtwoorden komen overeen';el.style.color='var(--success)';}
+      else{el.textContent='✗ Wachtwoorden komen niet overeen';el.style.color='var(--danger)';}
+    });
+  });
+  </script>
   {% endif %}
 
 </main>

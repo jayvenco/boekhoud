@@ -16,6 +16,7 @@ services:
       - /mnt/user/appdata/boekhoud/data:/app/data
       - /mnt/user/appdata/boekhoud/uploads:/app/uploads
       - /mnt/user/appdata/boekhoud/backups:/app/backups
+    user: "0:0"
     restart: unless-stopped
     # Veiligheid: beperk systeemrechten
     security_opt:
