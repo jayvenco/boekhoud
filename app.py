@@ -188,6 +188,15 @@ def bon_bestandsnaam(factuurnummer: str, ext: str) -> str:
             return f"{veilig}.{ext}"
     return f"{uuid.uuid4().hex}.{ext}"
 
+def get_taken_open():
+    """Aantal openstaande taken voor de sidebar-badge."""
+    try:
+        return get_db().execute(
+            "SELECT COUNT(*) c FROM taken WHERE status != 'voltooid'"
+        ).fetchone()["c"]
+    except Exception:
+        return 0
+
 def bereken_activa(rijen):
     """20% lineaire afschrijving per jaar op aanschafwaarde, tot boekwaarde 0."""
     resultaat = []
@@ -303,7 +312,8 @@ def transacties():
     rows = db.execute("SELECT * FROM transacties ORDER BY datum DESC, id DESC").fetchall()
     return render_template("index.html", pagina="transacties",
         transacties=rows, categorieen=ALLOWED_CATEGORIES,
-        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"))
+        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"),
+        taken_open=get_taken_open())
 
 @app.route("/transactie/toevoegen", methods=["POST"])
 @schrijf_vereist
@@ -375,7 +385,8 @@ def transactie_bewerken(tid):
             flash(f"Fout: {e}","error")
     return render_template("index.html", pagina="transactie_bewerken",
         transactie=t, categorieen=ALLOWED_CATEGORIES,
-        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"))
+        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"),
+        taken_open=get_taken_open())
 
 @app.route("/transactie/verwijderen/<int:tid>", methods=["POST"])
 @schrijf_vereist
@@ -398,7 +409,8 @@ def activa():
     rijen = db.execute("SELECT * FROM activa ORDER BY aanschafdatum DESC").fetchall()
     return render_template("index.html", pagina="activa",
         activa=bereken_activa(rijen),
-        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"))
+        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"),
+        taken_open=get_taken_open())
 
 @app.route("/activum/toevoegen", methods=["POST"])
 @schrijf_vereist
@@ -464,7 +476,8 @@ def winst_verlies():
         totaal_inkomsten=totaal_ink, totaal_uitgaven=totaal_uit,
         afschrijvingen_jaar=round(afschr_jaar,2), winst=round(winst,2),
         geselecteerd_jaar=jaar_int, jaren=jaren,
-        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"))
+        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"),
+        taken_open=get_taken_open())
 
 # ── OCR / Bon scannen ─────────────────────────────────────────────────────────
 @app.route("/ocr", methods=["POST"])
@@ -529,7 +542,8 @@ def taken():
     rows = db.execute("SELECT * FROM taken ORDER BY CASE prioriteit WHEN 'hoog' THEN 1 WHEN 'normaal' THEN 2 ELSE 3 END, vervaldatum ASC NULLS LAST").fetchall()
     return render_template("index.html", pagina="taken",
         taken=rows, categorieen=ALLOWED_CATEGORIES,
-        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"))
+        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"),
+        taken_open=get_taken_open())
 
 @app.route("/taak/toevoegen", methods=["POST"])
 @schrijf_vereist
@@ -689,7 +703,8 @@ def instellingen():
     return render_template("index.html", pagina="instellingen",
         backups=[p.name for p in backups[:20]],
         gebruikers=gebruikers,
-        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"))
+        gebruikersnaam=session.get("gebruikersnaam"), rol=session.get("rol"),
+        taken_open=get_taken_open())
 
 @app.route("/instellingen/wachtwoord", methods=["POST"])
 @login_vereist
