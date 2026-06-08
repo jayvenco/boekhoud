@@ -1,17 +1,23 @@
 services:
   app:
-    build: .
+    image: python:3.12-slim
     container_name: boekhoud-app
+    working_dir: /app
+    command: >
+      bash -c "apt-get update -q && apt-get install -y -q tesseract-ocr tesseract-ocr-nld tesseract-ocr-eng libmagic1 poppler-utils curl &&
+      pip install -q --no-cache-dir fastapi 'uvicorn[standard]' sqlalchemy aiosqlite jinja2 python-multipart 'passlib[bcrypt]' itsdangerous starlette pdfplumber pillow pytesseract openai httpx apscheduler python-magic aiofiles openpyxl &&
+      uvicorn main:app --host 0.0.0.0 --port 5000 --workers 1"
     ports:
       - "5000:5000"
     volumes:
+      - /mnt/user/appdata/boekhoud:/app
       - /mnt/user/appdata/boekhoud/data:/app/data
       - /mnt/user/appdata/boekhoud/uploads:/app/uploads
       - /mnt/user/appdata/boekhoud/backups:/app/backups
     environment:
-      - SECRET_KEY=${SECRET_KEY:-changeme-use-a-strong-secret-in-production}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - SECRET_KEY=changeme-gebruik-een-sterk-wachtwoord
+      - OPENAI_API_KEY=
+      - OLLAMA_BASE_URL=
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://192.168.2.200:5000/health"]
