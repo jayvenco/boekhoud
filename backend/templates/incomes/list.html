@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Inkomsten{% endblock %}
+{% block page_title %}Inkomsten{% endblock %}
+
+{% block topbar_actions %}
+<a href="/inkomsten/nieuw" class="btn btn-primary">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  Nieuwe inkomst
+</a>
+{% endblock %}
+
+{% block content %}
+{% set total = namespace(val=0) %}
+{% set paid = namespace(val=0) %}
+{% set unpaid = namespace(val=0) %}
+{% for i in incomes %}
+  {% set total.val = total.val + i.amount %}
+  {% if i.status == "betaald" %}{% set paid.val = paid.val + i.amount %}{% else %}{% set unpaid.val = unpaid.val + i.amount %}{% endif %}
+{% endfor %}
+
+<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+  <div class="stat-card income">
+    <div class="stat-label">Totaal inkomsten</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total.val) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Ontvangen</div>
+    <div class="stat-value amount" style="color:var(--success)">€ {{ "%.2f"|format(paid.val) }}</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-label">Openstaand</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(unpaid.val) }}</div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  {% if incomes %}
+  <table>
+    <thead>
+      <tr>
+        <th>Factuurnummer</th>
+        <th>Datum</th>
+        <th>Categorie</th>
+        <th>Omschrijving</th>
+        <th>Bedrag</th>
+        <th>Status</th>
+        <th>Bon</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in incomes %}
+      <tr>
+        <td style="font-weight:500;color:var(--dark)">{{ i.invoice_number }}</td>
+        <td>{{ i.date.strftime("%d.%m.%Y") }}</td>
+        <td><span class="badge badge-neutral">{{ i.category.name }}</span></td>
+        <td style="color:var(--light-text)">{{ i.description[:40] if i.description else "—" }}</td>
+        <td class="amount amount-positive">€ {{ "%.2f"|format(i.amount) }}</td>
+        <td>
+          {% if i.status == "betaald" %}
+            <span class="badge badge-success">Betaald</span>
+          {% else %}
+            <span class="badge badge-warning">Openstaand</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if i.receipt_path %}
+            <a href="/{{ i.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 Bon</a>
+          {% else %}
+            <span style="color:var(--light-text);font-size:13px">—</span>
+          {% endif %}
+        </td>
+        <td>
+          <div style="display:flex;gap:6px;">
+            <a href="/inkomsten/{{ i.id }}/bewerken" class="btn btn-outline btn-xs">Bewerken</a>
+            <form method="post" action="/inkomsten/{{ i.id }}/verwijderen" onsubmit="return confirm('Inkomst verwijderen?')">
+              <button type="submit" class="btn btn-danger btn-xs">Verwijder</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">💶</div>
+    <p>Nog geen inkomsten geregistreerd.</p>
+    <br>
+    <a href="/inkomsten/nieuw" class="btn btn-primary">Eerste inkomst toevoegen</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

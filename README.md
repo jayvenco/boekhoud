@@ -1,75 +1,187 @@
-# Boekhoud App V3
+# 📒 Boekhoud App
 
-Eenvoudige boekhoudapplicatie gebouwd met Python Flask, SQLite en Docker.
+Een eenvoudige, lichtgewicht en self-hosted boekhoudapplicatie voor kleine praktijken en zelfstandigen.
 
-## Functies
-- ✅ Login systeem (sessiegebaseerd)
-- ✅ Transacties (inkomsten & uitgaven)
-- ✅ Categoriebeheer + upload per categorie
-- ✅ Bonnen/facturen uploaden (PDF, JPG, PNG)
-- ✅ AI OCR via OpenAI GPT-4.1-mini
-- ✅ Activa & lineaire afschrijvingen
-- ✅ Winst & verlies per jaar
-- ✅ Dashboard met financieel overzicht
+## ✨ Functies
 
-## Installatie
+- **Inkomstenbeheer** — Facturen bijhouden met status (betaald / onbetaald)
+- **Uitgavenbeheer** — Kosten per categorie registreren
+- **Bonnen uploaden** — PDF, JPG, PNG — automatisch opgeslagen per categorie
+- **AI-bonverwerking** — Automatisch uitlezen via OpenAI of lokale Ollama LLM
+- **Afschrijvingen** — Investeringen over 5 jaar afschrijven
+- **Geplande uitgaven** — Toekomstige uitgaven en notities bijhouden
+- **Dashboard** — Overzicht met grafieken en statistieken
+- **Rapportages** — Per jaar, per categorie, afschrijvingsoverzicht
+- **CSV export** — Inkomsten en uitgaven exporteren
+- **Database backup** — Met één klik een backup aanmaken
+- **Docker** — Volledig geconfigureerd voor Docker Compose
+
+## 🚀 Installatie
 
 ### Vereisten
 - Docker
 - Docker Compose
 
-### Stap 1 – API Key instellen
-Open `docker-compose.yml` en vul je OpenAI API key in:
-```
-OPENAI_API_KEY=sk-xxxxxx
-```
+### Stap 1 — Kloon of download het project
 
-Stel ook een sterke SECRET_KEY in:
-```
-SECRET_KEY=een_lange_willekeurige_string_hier
-```
-
-### Stap 2 – Starten
 ```bash
-docker compose up --build
+git clone <repo-url> boekhoud-app
+cd boekhoud-app
 ```
 
-### Stap 3 – Inloggen
-Open: http://localhost:5000
+### Stap 2 — Configureer omgevingsvariabelen (optioneel)
 
-| Veld           | Waarde    |
-|----------------|-----------|
-| Gebruikersnaam | admin     |
-| Wachtwoord     | admin123  |
+Maak een `.env` bestand aan:
 
-> ⚠️ Wijzig het admin-wachtwoord na eerste inlog via de database.
+```env
+# Verplicht: verander dit naar een lange willekeurige string
+SECRET_KEY=vervang-dit-met-een-veilig-wachtwoord-123abc
 
-## Veiligheidsmaatregelen (al ingebouwd)
-- Wachtwoorden opgeslagen als Werkzeug bcrypt-hash
-- Sessies: HttpOnly, SameSite=Lax, max 1 uur
-- Alle invoer gesanitized via `bleach`
-- Bestandsuploads: alleen PDF/JPG/PNG, max 10 MB
-- Bestandsnamen vervangen door UUID (geen path traversal)
-- Categorie-whitelist (geen willekeurige mapmaken)
-- SQL: uitsluitend parameterized queries
-- Docker: non-root gebruiker, no-new-privileges
+# Optioneel: voor AI-bonverwerking via OpenAI
+OPENAI_API_KEY=sk-...
 
-## Projectstructuur
+# Optioneel: voor lokale AI via Ollama
+OLLAMA_BASE_URL=http://localhost:11434
 ```
-boekhoud_app_v3/
-├── app.py                  # Flask applicatie
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── templates/
-│   ├── index.html          # Alle pagina's (dashboard, transacties, activa, W&V)
-│   └── login.html
-├── uploads/                # Gegenereerd bij start
-│   ├── Kantoor/
-│   ├── Marketing/
-│   ├── Transport/
-│   ├── Investering/
-│   └── Overig/
-└── data/
-    └── boekhouding.db      # SQLite database (via Docker volume)
+
+### Stap 3 — Start de applicatie
+
+```bash
+docker-compose up -d
 ```
+
+### Stap 4 — Open de app
+
+Ga naar: **http://localhost:8000**
+
+**Standaard inloggegevens:**
+- Gebruikersnaam: `admin`
+- Wachtwoord: `admin123`
+
+> ⚠️ **Wijzig het wachtwoord direct na de eerste login!**
+
+---
+
+## 📁 Mappenstructuur
+
+```
+boekhoud-app/
+├── main.py                    # FastAPI applicatie
+├── requirements.txt           # Python packages
+├── Dockerfile                 # Docker image definitie
+├── docker-compose.yml         # Docker Compose configuratie
+├── backend/
+│   ├── models/
+│   │   ├── models.py          # Database modellen
+│   │   └── database.py        # Database verbinding & init
+│   ├── routers/
+│   │   ├── auth.py            # Inloggen / uitloggen
+│   │   ├── incomes.py         # Inkomstenbeheer
+│   │   ├── expenses.py        # Uitgavenbeheer
+│   │   ├── dashboard.py       # Dashboard & rapportages
+│   │   └── misc.py            # OCR, instellingen, backup, gepland
+│   ├── services/
+│   │   ├── auth.py            # Authenticatie helpers
+│   │   ├── ocr.py             # OCR & AI-verwerking
+│   │   └── files.py           # Bestandsbeheer
+│   └── templates/             # Jinja2 HTML templates
+├── data/                      # SQLite database (persistent)
+├── uploads/                   # Geüploade bestanden (persistent)
+│   ├── inkomsten/behandelingen/
+│   ├── uitgaven/praktijkinrichting/
+│   ├── uitgaven/vaste_lasten/
+│   └── ...
+└── backups/                   # Database backups
+```
+
+---
+
+## 🤖 AI-bonverwerking configureren
+
+### Optie 1: OpenAI (cloud)
+
+Voeg toe aan `.env`:
+```env
+OPENAI_API_KEY=sk-jouw-api-sleutel
+```
+
+### Optie 2: Ollama (lokaal, gratis)
+
+1. Installeer [Ollama](https://ollama.ai)
+2. Haal het model op: `ollama pull llama3.2`
+3. Voeg toe aan `.env`:
+```env
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+Als geen AI geconfigureerd is, wordt Tesseract OCR gebruikt voor tekstextractie.
+
+---
+
+## 💾 Backup & Herstel
+
+### Backup aanmaken
+Via de app: Instellingen → "Backup aanmaken"
+
+Of handmatig:
+```bash
+cp data/boekhoud.db backups/boekhoud_$(date +%Y%m%d).db
+```
+
+### Backup herstellen
+```bash
+docker-compose down
+cp backups/boekhoud_20260101.db data/boekhoud.db
+docker-compose up -d
+```
+
+---
+
+## 🔒 Beveiliging
+
+- Wachtwoorden worden gehashed met bcrypt
+- Sessies zijn beveiligd met een HMAC-gesigneerde cookie
+- Bestandsuploads zijn beperkt tot PDF, JPG en PNG
+- Maximale bestandsgrootte: 10MB
+- Input wordt gevalideerd voor opslag
+
+---
+
+## 🛠 Onderhoud
+
+### Logs bekijken
+```bash
+docker-compose logs -f app
+```
+
+### App herstarten
+```bash
+docker-compose restart app
+```
+
+### Updaten
+```bash
+docker-compose down
+git pull
+docker-compose up -d --build
+```
+
+---
+
+## 📊 Categorieën
+
+### Inkomsten
+- Behandelingen
+
+### Uitgaven
+- Praktijkinrichting
+- Vaste lasten
+- Abonnementen
+- Materiaal
+- Materieel
+- Marketing
+- Reiskosten
+
+---
+
+*Gebouwd met FastAPI, SQLite, Jinja2 en Tailwind-stijlen.*

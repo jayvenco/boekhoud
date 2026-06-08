@@ -1,26 +1,36 @@
 FROM python:3.12-slim
 
-# Veiligheid: draai als niet-root gebruiker
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-nld \
+    tesseract-ocr-eng \
+    libmagic1 \
+    poppler-utils \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Installeer dependencies eerst (cache-laag)
+# Copy requirements first for layer caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopieer applicatiecode
-COPY . .
+# Copy application code
+COPY backend/ ./backend/
+COPY main.py .
 
-# Maak upload- en datamappen aan met juiste eigenaar
-RUN mkdir -p uploads/Kantoor uploads/Marketing uploads/Transport uploads/Investering uploads/Overig \
-    && mkdir -p /app/data \
-    && chown -R appuser:appuser /app
+# Create necessary directories
+RUN mkdir -p /app/data /app/uploads /app/backups \
+    /app/uploads/inkomsten/behandelingen \
+    /app/uploads/uitgaven/praktijkinrichting \
+    /app/uploads/uitgaven/vaste_lasten \
+    /app/uploads/uitgaven/abonnementen \
+    /app/uploads/uitgaven/materiaal \
+    /app/uploads/uitgaven/materieel \
+    /app/uploads/uitgaven/marketing \
+    /app/uploads/uitgaven/reiskosten
 
-# Schakel over naar niet-root gebruiker
-USER appuser
+EXPOSE 8000
 
-EXPOSE 5000
-
-# Gebruik gunicorn-stijl productie-instelling via flask run met beperkte host
-CMD ["python", "app.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

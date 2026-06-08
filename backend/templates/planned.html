@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Geplande uitgaven{% endblock %}
+{% block page_title %}Geplande uitgaven & Notities{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start;">
+  <div>
+    {% if planned %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Titel</th><th>Datum</th><th>Bedrag</th><th>Omschrijving</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for p in planned %}
+          <tr>
+            <td style="font-weight:500;color:var(--dark)">{{ p.title }}</td>
+            <td>{{ p.planned_date.strftime("%d.%m.%Y") if p.planned_date else "—" }}</td>
+            <td class="amount">{% if p.amount %}€ {{ "%.2f"|format(p.amount) }}{% else %}—{% endif %}</td>
+            <td style="color:var(--light-text)">{{ p.description[:40] if p.description else "—" }}</td>
+            <td>
+              <form method="post" action="/gepland/{{ p.id }}/status" style="display:inline;">
+                <select name="status" onchange="this.form.submit()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--stone);">
+                  <option value="gepland" {% if p.status == "gepland" %}selected{% endif %}>Gepland</option>
+                  <option value="voltooid" {% if p.status == "voltooid" %}selected{% endif %}>Voltooid</option>
+                  <option value="geannuleerd" {% if p.status == "geannuleerd" %}selected{% endif %}>Geannuleerd</option>
+                </select>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="/gepland/{{ p.id }}/verwijderen" onsubmit="return confirm('Verwijderen?')">
+                <button type="submit" class="btn btn-danger btn-xs">Verwijder</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="empty-state">
+        <div class="empty-state-icon">📅</div>
+        <p>Nog geen geplande uitgaven.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;">Nieuwe geplande uitgave</div>
+    <form method="post" action="/gepland/nieuw">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Titel *</label>
+        <input type="text" name="title" required placeholder="bijv. Nieuwe stoel">
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Bedrag (€)</label>
+        <input type="number" name="amount" step="0.01" min="0" placeholder="Optioneel">
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Verwachte datum</label>
+        <input type="date" name="planned_date">
+      </div>
+      <div class="form-group" style="margin-bottom:18px;">
+        <label>Notitie</label>
+        <textarea name="description" placeholder="Optionele toelichting…" style="min-height:70px;"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Toevoegen</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

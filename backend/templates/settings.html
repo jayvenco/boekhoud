@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Instellingen{% endblock %}
+{% block page_title %}Instellingen{% endblock %}
+
+{% block content %}
+{% if success == "1" %}
+<div class="alert alert-success">✅ Instellingen opgeslagen.</div>
+{% elif success == "backup" %}
+<div class="alert alert-success">✅ Backup aangemaakt in /backups/</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+  <div class="card">
+    <div class="section-title" style="margin-bottom:20px;">Bedrijfsinstellingen</div>
+    {% if pw_error %}
+    <div class="alert alert-error">{{ pw_error }}</div>
+    {% endif %}
+    <form method="post" action="/instellingen" enctype="multipart/form-data">
+      <div class="form-group" style="margin-bottom:16px;">
+        <label>Bedrijfsnaam</label>
+        <input type="text" name="company_name" value="{{ settings.company_name if settings else 'Mijn Praktijk' }}">
+      </div>
+      <div class="form-group" style="margin-bottom:20px;">
+        <label>Bedrijfslogo (PNG/JPG)</label>
+        <input type="file" name="logo" accept=".png,.jpg,.jpeg">
+        {% if settings and settings.logo_path %}
+        <div style="margin-top:8px;">
+          <img src="/uploads/logo/{{ settings.logo_path.split('/')[-1] }}" style="max-height:60px;border-radius:6px;" alt="Logo">
+        </div>
+        {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary">Opslaan</button>
+    </form>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:20px;">Wachtwoord wijzigen</div>
+      <form method="post" action="/instellingen/wachtwoord">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Huidig wachtwoord</label>
+          <input type="password" name="current_password" required>
+        </div>
+        <div class="form-group" style="margin-bottom:18px;">
+          <label>Nieuw wachtwoord</label>
+          <input type="password" name="new_password" required minlength="6">
+        </div>
+        <button type="submit" class="btn btn-outline">Wachtwoord wijzigen</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Database Backup</div>
+      <p style="font-size:13px;color:var(--light-text);margin-bottom:16px;">
+        Maak een backup van de SQLite database. Backups worden opgeslagen in de <code>/backups/</code> map.
+      </p>
+      <form method="post" action="/backup/maak">
+        <button type="submit" class="btn btn-outline">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Backup aanmaken
+        </button>
+      </form>
+    </div>
+
+    <div class="card" style="background:var(--sage-pale);border-color:var(--sage-light);">
+      <div class="section-title" style="margin-bottom:10px;font-size:15px;">AI / LLM Instellingen</div>
+      <p style="font-size:13px;color:var(--mid);margin-bottom:8px;">
+        Configureer via omgevingsvariabelen in <code>docker-compose.yml</code>:
+      </p>
+      <ul style="font-size:13px;color:var(--mid);padding-left:18px;line-height:2;">
+        <li><code>OPENAI_API_KEY</code> — voor OpenAI GPT-4o mini</li>
+        <li><code>OLLAMA_BASE_URL</code> — voor lokale LLM (bijv. http://ollama:11434)</li>
+      </ul>
+      <p style="font-size:12px;color:var(--warm-gray);margin-top:8px;">
+        Als geen AI geconfigureerd is, wordt alleen OCR-tekst geëxtraheerd.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:20px;" class="card">
+  <div class="section-title" style="margin-bottom:12px;">Standaard inloggegevens</div>
+  <p style="font-size:13px;color:var(--light-text);">
+    Gebruikersnaam: <strong>admin</strong> — Wachtwoord: <strong>admin123</strong><br>
+    <span style="color:var(--danger)">⚠️ Wijzig het wachtwoord direct na de eerste login!</span>
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Rapportages{% endblock %}
+{% block page_title %}Rapportages {{ year }}{% endblock %}
+
+{% block topbar_actions %}
+<form method="get" style="display:flex;align-items:center;gap:8px;">
+  <select name="jaar" onchange="this.form.submit()" style="padding:8px 12px;border:1px solid var(--stone);border-radius:8px;font-size:13px;background:white;">
+    {% for y in years %}
+    <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+    {% endfor %}
+  </select>
+</form>
+<a href="/export/inkomsten" class="btn btn-outline btn-sm">↓ CSV Inkomsten</a>
+<a href="/export/uitgaven" class="btn btn-outline btn-sm">↓ CSV Uitgaven</a>
+{% endblock %}
+
+{% block content %}
+<div class="stat-grid" style="margin-bottom:28px;">
+  <div class="stat-card income">
+    <div class="stat-label">Totale inkomsten</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_income) }}</div>
+    <div class="stat-sub">{{ year }}</div>
+  </div>
+  <div class="stat-card expense">
+    <div class="stat-label">Totale uitgaven</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_expenses) }}</div>
+    <div class="stat-sub">{{ year }}</div>
+  </div>
+  <div class="stat-card {% if profit >= 0 %}income{% else %}expense{% endif %}">
+    <div class="stat-label">Netto resultaat</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(profit) }}</div>
+    <div class="stat-sub">Winst / Verlies</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;">Inkomsten per categorie</div>
+    {% if income_by_cat %}
+    <canvas id="incomeChart" height="200"></canvas>
+    <table style="margin-top:16px;">
+      <thead><tr><th>Categorie</th><th>Bedrag</th><th>%</th></tr></thead>
+      <tbody>
+        {% for name, total in income_by_cat %}
+        <tr>
+          <td>{{ name }}</td>
+          <td class="amount amount-positive">€ {{ "%.2f"|format(total) }}</td>
+          <td style="color:var(--light-text)">{{ "%.0f"|format(total / total_income * 100) if total_income else 0 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><p>Geen inkomsten in {{ year }}</p></div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;">Uitgaven per categorie</div>
+    {% if expense_by_cat %}
+    <canvas id="expenseChart" height="200"></canvas>
+    <table style="margin-top:16px;">
+      <thead><tr><th>Categorie</th><th>Bedrag</th><th>%</th></tr></thead>
+      <tbody>
+        {% for name, total in expense_by_cat %}
+        <tr>
+          <td>{{ name }}</td>
+          <td class="amount amount-negative">€ {{ "%.2f"|format(total) }}</td>
+          <td style="color:var(--light-text)">{{ "%.0f"|format(total / total_expenses * 100) if total_expenses else 0 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><p>Geen uitgaven in {{ year }}</p></div>
+    {% endif %}
+  </div>
+</div>
+
+{% if depreciations %}
+<div class="card">
+  <div class="section-title" style="margin-bottom:16px;">Afschrijvingsoverzicht</div>
+  <div class="table-wrap" style="border:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>Omschrijving</th>
+          <th>Aanschafwaarde</th>
+          <th>Jaarlijkse afschr.</th>
+          <th>Afgeschreven</th>
+          <th>Restwaarde</th>
+          <th>Eindejaar</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for dep in depreciations %}
+        <tr>
+          <td style="font-weight:500">{{ dep.description }}</td>
+          <td class="amount">€ {{ "%.2f"|format(dep.purchase) }}</td>
+          <td class="amount">€ {{ "%.2f"|format(dep.annual) }}</td>
+          <td class="amount amount-negative">€ {{ "%.2f"|format(dep.depreciated) }}</td>
+          <td class="amount amount-positive">€ {{ "%.2f"|format(dep.remaining) }}</td>
+          <td>{{ dep.end_year }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+{% if income_by_cat %}
+new Chart(document.getElementById('incomeChart'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ income_by_cat | map(attribute=0) | list | tojson }},
+    datasets: [{
+      data: {{ income_by_cat | map(attribute=1) | list | tojson }},
+      backgroundColor: ['#5A9070','#7AAB8A','#9DC4A6','#BDD8C2','#DAECDc'],
+      borderWidth: 2, borderColor: '#fff'
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: true,
+    plugins: { legend: { position: 'bottom', labels: { font: { family: 'DM Sans', size: 12 } } } }
+  }
+});
+{% endif %}
+{% if expense_by_cat %}
+new Chart(document.getElementById('expenseChart'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ expense_by_cat | map(attribute=0) | list | tojson }},
+    datasets: [{
+      data: {{ expense_by_cat | map(attribute=1) | list | tojson }},
+      backgroundColor: ['#C0665A','#D08880','#E0AAA4','#ECC8C4','#F5E0DE','#F9EDEC','#FCF5F4'],
+      borderWidth: 2, borderColor: '#fff'
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: true,
+    plugins: { legend: { position: 'bottom', labels: { font: { family: 'DM Sans', size: 12 } } } }
+  }
+});
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inloggen – Boekhoud App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --sage: #8BA888; --cream: #F9F7F4; --stone: #E8E3DC;
+      --dark: #2C2C2A; --mid: #5C5850; --light: #A89E92;
+      --danger-light: #FAEAE8; --danger: #C0665A;
+    }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-wrap {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      min-height: 100vh;
+      width: 100%;
+    }
+    .login-art {
+      background: linear-gradient(160deg, #C5D5C2 0%, #A8C4A4 40%, #8BA888 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .login-art::before {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 50%;
+      top: -100px; left: -150px;
+    }
+    .login-art::after {
+      content: '';
+      position: absolute;
+      width: 300px; height: 300px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 50%;
+      bottom: -50px; right: -80px;
+    }
+    .art-text {
+      text-align: center;
+      z-index: 1;
+      color: white;
+    }
+    .art-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 42px;
+      line-height: 1.2;
+      margin-bottom: 12px;
+      font-style: italic;
+    }
+    .art-sub { font-size: 15px; opacity: 0.8; font-weight: 300; }
+    .login-form-wrap {
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px;
+    }
+    .login-box { width: 100%; max-width: 320px; }
+    .login-logo {
+      font-family: 'DM Serif Display', serif;
+      font-size: 26px;
+      color: var(--dark);
+      margin-bottom: 8px;
+    }
+    .login-tagline { font-size: 13px; color: var(--light); margin-bottom: 36px; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 500; color: var(--mid); margin-bottom: 6px; }
+    input {
+      width: 100%; padding: 11px 14px;
+      font-family: inherit; font-size: 14px;
+      border: 1px solid var(--stone); border-radius: 8px;
+      color: var(--dark); background: white;
+      transition: border-color 0.15s;
+    }
+    input:focus { outline: none; border-color: var(--sage); box-shadow: 0 0 0 3px rgba(139,168,136,0.15); }
+    .btn-login {
+      width: 100%; padding: 12px;
+      background: var(--sage); color: white;
+      border: none; border-radius: 8px;
+      font-family: inherit; font-size: 15px; font-weight: 500;
+      cursor: pointer; transition: background 0.15s;
+      margin-top: 8px;
+    }
+    .btn-login:hover { background: #7A9877; }
+    .alert { padding: 12px 14px; background: var(--danger-light); color: var(--danger); border-radius: 8px; font-size: 14px; margin-bottom: 20px; }
+    @media (max-width: 700px) {
+      .login-wrap { grid-template-columns: 1fr; }
+      .login-art { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-art">
+      <div class="art-text">
+        <div class="art-title">Inzicht in<br>uw financiën</div>
+        <div class="art-sub">Eenvoudig · Overzichtelijk · Professioneel</div>
+      </div>
+    </div>
+    <div class="login-form-wrap">
+      <div class="login-box">
+        <div class="login-logo">Boekhouding</div>
+        <div class="login-tagline">Log in om verder te gaan</div>
+        {% if error %}
+        <div class="alert">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="/login">
+          <div class="form-group">
+            <label for="username">Gebruikersnaam</label>
+            <input type="text" id="username" name="username" required autofocus autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="password">Wachtwoord</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn-login">Inloggen</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

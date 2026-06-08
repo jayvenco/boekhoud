@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Boekhoud App{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sage: #8BA888;
+      --sage-light: #C5D5C2;
+      --sage-pale: #EFF4EE;
+      --cream: #F9F7F4;
+      --stone: #E8E3DC;
+      --warm-gray: #A89E92;
+      --dark: #2C2C2A;
+      --mid: #5C5850;
+      --light-text: #8C8880;
+      --white: #FFFFFF;
+      --danger: #C0665A;
+      --danger-light: #FAEAE8;
+      --success: #5A9070;
+      --success-light: #EAF2EC;
+      --sidebar-w: 240px;
+      --radius: 12px;
+      --shadow: 0 2px 16px rgba(44,44,42,0.07);
+      --shadow-md: 0 4px 24px rgba(44,44,42,0.11);
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--dark);
+      min-height: 100vh;
+      display: flex;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--white);
+      border-right: 1px solid var(--stone);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 100;
+      padding: 0;
+    }
+
+    .sidebar-brand {
+      padding: 28px 24px 24px;
+      border-bottom: 1px solid var(--stone);
+    }
+
+    .brand-name {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      color: var(--dark);
+      line-height: 1.2;
+      display: block;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--light-text);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 20px 12px;
+      overflow-y: auto;
+    }
+
+    .nav-section {
+      margin-bottom: 24px;
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--warm-gray);
+      padding: 0 12px;
+      margin-bottom: 6px;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--mid);
+      font-size: 14px;
+      font-weight: 400;
+      transition: all 0.15s;
+      margin-bottom: 2px;
+    }
+
+    .nav-link:hover { background: var(--sage-pale); color: var(--dark); }
+    .nav-link.active { background: var(--sage-pale); color: var(--sage); font-weight: 500; }
+    .nav-link .icon { width: 18px; opacity: 0.7; flex-shrink: 0; }
+    .nav-link.active .icon { opacity: 1; }
+
+    .sidebar-footer {
+      padding: 16px 12px;
+      border-top: 1px solid var(--stone);
+    }
+
+    /* ── Main ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      background: var(--white);
+      border-bottom: 1px solid var(--stone);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .page-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 22px;
+      color: var(--dark);
+    }
+
+    .topbar-actions { display: flex; align-items: center; gap: 12px; }
+
+    .content {
+      padding: 32px;
+      flex: 1;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1px solid var(--stone);
+      padding: 24px;
+    }
+
+    .card-sm { padding: 20px; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1px solid var(--stone);
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--sage);
+    }
+
+    .stat-card.income::before { background: var(--success); }
+    .stat-card.expense::before { background: var(--danger); }
+    .stat-card.warning::before { background: #D4A853; }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--light-text);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: 'DM Serif Display', serif;
+      font-size: 28px;
+      color: var(--dark);
+      line-height: 1;
+    }
+
+    .stat-sub { font-size: 12px; color: var(--warm-gray); margin-top: 6px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid transparent;
+      text-decoration: none;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--sage);
+      color: var(--white);
+      border-color: var(--sage);
+    }
+    .btn-primary:hover { background: #7A9877; border-color: #7A9877; }
+
+    .btn-outline {
+      background: var(--white);
+      color: var(--mid);
+      border-color: var(--stone);
+    }
+    .btn-outline:hover { background: var(--sage-pale); border-color: var(--sage-light); color: var(--dark); }
+
+    .btn-danger {
+      background: var(--white);
+      color: var(--danger);
+      border-color: var(--stone);
+    }
+    .btn-danger:hover { background: var(--danger-light); border-color: var(--danger); }
+
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+    .btn-xs { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
+
+    /* ── Table ── */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--stone);
+      background: var(--white);
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--warm-gray);
+      border-bottom: 1px solid var(--stone);
+      background: var(--cream);
+    }
+    tbody td {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--stone);
+      font-size: 14px;
+      color: var(--mid);
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--sage-pale); }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .badge-success { background: var(--success-light); color: var(--success); }
+    .badge-warning { background: #FEF3DC; color: #A07830; }
+    .badge-danger { background: var(--danger-light); color: var(--danger); }
+    .badge-neutral { background: var(--stone); color: var(--mid); }
+
+    /* ── Forms ── */
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+    .form-full { grid-column: 1 / -1; }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--mid);
+    }
+
+    input, select, textarea {
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--dark);
+      background: var(--white);
+      border: 1px solid var(--stone);
+      border-radius: 8px;
+      padding: 10px 14px;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--sage);
+      box-shadow: 0 0 0 3px rgba(139,168,136,0.15);
+    }
+    textarea { resize: vertical; min-height: 90px; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .checkbox-row input[type="checkbox"] {
+      width: 18px; height: 18px;
+      cursor: pointer;
+      accent-color: var(--sage);
+    }
+
+    /* ── Alerts ── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    .alert-error { background: var(--danger-light); color: var(--danger); border: 1px solid #E8B4AF; }
+    .alert-success { background: var(--success-light); color: var(--success); border: 1px solid #A8CDB4; }
+
+    /* ── Misc ── */
+    .amount-positive { color: var(--success); font-weight: 500; }
+    .amount-negative { color: var(--danger); font-weight: 500; }
+    .amount { font-variant-numeric: tabular-nums; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--warm-gray);
+    }
+    .empty-state-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.4; }
+    .empty-state p { font-size: 15px; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 18px;
+      color: var(--dark);
+    }
+
+    .divider-row { height: 24px; }
+
+    /* OCR Panel */
+    .ocr-panel {
+      background: var(--sage-pale);
+      border: 1px solid var(--sage-light);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .ocr-panel h3 {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--sage);
+      margin-bottom: 10px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .main { margin-left: 0; }
+      .content { padding: 20px 16px; }
+      .stat-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if user %}
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-name">{{ request.state.settings.company_name if request.state.settings else "Mijn Praktijk" }}</span>
+      <span class="brand-sub">Boekhouding</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-label">Overzicht</div>
+        <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a href="/rapportages" class="nav-link {% if '/rapportages' in request.url.path %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10m-6 10V4M6 20v-6"/></svg>
+          Rapportages
+        </a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Transacties</div>
+        <a href="/inkomsten" class="nav-link {% if '/inkomsten' in request.url.path %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
+          Inkomsten
+        </a>
+        <a href="/uitgaven" class="nav-link {% if '/uitgaven' in request.url.path %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14m7-7l-7 7-7-7"/></svg>
+          Uitgaven
+        </a>
+        <a href="/gepland" class="nav-link {% if '/gepland' in request.url.path %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Gepland
+        </a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Export</div>
+        <a href="/export/inkomsten" class="nav-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          CSV Inkomsten
+        </a>
+        <a href="/export/uitgaven" class="nav-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          CSV Uitgaven
+        </a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="/instellingen" class="nav-link {% if '/instellingen' in request.url.path %}active{% endif %}">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Instellingen
+      </a>
+      <a href="/logout" class="nav-link">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Uitloggen
+      </a>
+    </div>
+  </aside>
+  {% endif %}
+
+  <main class="main">
+    {% if user %}
+    <div class="topbar">
+      <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+      <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+    </div>
+    {% endif %}
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</body>
+</html>

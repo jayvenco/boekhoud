@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{% if income %}Inkomst bewerken{% else %}Nieuwe inkomst{% endif %}{% endblock %}
+{% block page_title %}{% if income %}Inkomst bewerken{% else %}Nieuwe inkomst{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/inkomsten" class="btn btn-outline">← Terug</a>
+{% endblock %}
+
+{% block content %}
+{% if not income %}
+<div class="ocr-panel">
+  <h3>🤖 Bon automatisch uitlezen (AI)</h3>
+  <p style="font-size:13px;color:var(--mid);margin-bottom:12px">Upload een bon of factuur en laat AI de gegevens automatisch invullen.</p>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <input type="file" id="ocr-file" accept=".pdf,.jpg,.jpeg,.png" style="flex:1;font-size:13px;">
+    <button onclick="runOcr()" class="btn btn-primary btn-sm" id="ocr-btn">Uitlezen</button>
+  </div>
+  <div id="ocr-status" style="margin-top:10px;font-size:13px;color:var(--mid)"></div>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" enctype="multipart/form-data">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="invoice_number">Factuurnummer *</label>
+        <input type="text" id="invoice_number" name="invoice_number" required
+               value="{{ income.invoice_number if income else '' }}" placeholder="bijv. 2026-001">
+      </div>
+      <div class="form-group">
+        <label for="category_id">Categorie *</label>
+        <select id="category_id" name="category_id" required>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if income and income.category_id == cat.id %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="date">Datum * (DD.MM.JJJJ)</label>
+        <input type="text" id="date" name="date" required
+               value="{{ income.date.strftime('%d.%m.%Y') if income else '' }}"
+               placeholder="01.01.2026">
+      </div>
+      <div class="form-group">
+        <label for="amount">Bedrag (€) *</label>
+        <input type="number" id="amount" name="amount" step="0.01" min="0" required
+               value="{{ income.amount if income else '' }}" placeholder="0.00">
+      </div>
+      <div class="form-group form-full">
+        <label for="description">Omschrijving</label>
+        <textarea id="description" name="description" placeholder="Optionele omschrijving…">{{ income.description if income else '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          <option value="betaald" {% if income and income.status == 'betaald' %}selected{% endif %}>Betaald</option>
+          <option value="niet_betaald" {% if not income or income.status == 'niet_betaald' %}selected{% endif %}>Niet betaald</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="receipt">Bon uploaden (PDF/JPG/PNG)</label>
+        <input type="file" id="receipt" name="receipt" accept=".pdf,.jpg,.jpeg,.png">
+        {% if income and income.receipt_path %}
+        <div style="margin-top:6px;font-size:13px;color:var(--mid)">
+          Huidig: <a href="/{{ income.receipt_path }}" target="_blank" style="color:var(--sage)">Bekijk bon</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <div style="margin-top:24px;display:flex;gap:12px;">
+      <button type="submit" class="btn btn-primary">
+        {% if income %}Wijzigingen opslaan{% else %}Inkomst opslaan{% endif %}
+      </button>
+      <a href="/inkomsten" class="btn btn-outline">Annuleren</a>
+    </div>
+  </form>
+</div>
+
+{% if not income %}
+<script>
+async function runOcr() {
+  const fileInput = document.getElementById('ocr-file');
+  const btn = document.getElementById('ocr-btn');
+  const status = document.getElementById('ocr-status');
+  if (!fileInput.files[0]) { status.textContent = 'Selecteer eerst een bestand.'; return; }
+  
+  btn.disabled = true;
+  btn.textContent = 'Bezig…';
+  status.textContent = 'Bon wordt uitgelezen…';
+
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+
+  try {
+    const resp = await fetch('/ocr/upload', { method: 'POST', body: fd });
+    const data = await resp.json();
+    
+    if (data.error) { status.textContent = '⚠️ ' + data.error; return; }
+    
+    if (data.invoice_number) document.getElementById('invoice_number').value = data.invoice_number;
+    if (data.date) document.getElementById('date').value = data.date;
+    if (data.amount) document.getElementById('amount').value = data.amount;
+    if (data.description) document.getElementById('description').value = data.description;
+    
+    status.innerHTML = '✅ Gegevens ingevuld. Controleer en pas aan indien nodig.';
+    if (data._raw_text) {
+      status.innerHTML += `<br><small style="color:var(--light-text)">Uitgelezen tekst: ${data._raw_text.substring(0,100)}…</small>`;
+    }
+  } catch(e) {
+    status.textContent = 'Fout bij verwerking. Probeer opnieuw.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Uitlezen';
+  }
+}
+</script>
+{% endif %}
+{% endblock %}
