@@ -1,31 +1,20 @@
-version: "3.9"
-
 services:
-  boekhoud_app:
-    build: https://github.com/jayvenco/boekhoud.git
-    container_name: boekhoud_app_v3
+  app:
+    build: .
+    container_name: boekhoud-app
     ports:
-      - "5000:5000"
-    environment:
-      # openssl rand -hex 24
-      - OPENAI_API_KEY=your_openai_api_key
-      - SECRET_KEY=vervang_dit_met_een_lange_willekeurige_string
-      - FLASK_ENV=production
+      - "5000:8000"
     volumes:
-      # Persistente opslag buiten de container
       - /mnt/user/appdata/boekhoud/data:/app/data
       - /mnt/user/appdata/boekhoud/uploads:/app/uploads
       - /mnt/user/appdata/boekhoud/backups:/app/backups
-    user: "0:0"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-changeme-use-a-strong-secret-in-production}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
     restart: unless-stopped
-    # Veiligheid: beperk systeemrechten
-    security_opt:
-      - no-new-privileges:true
-    read_only: false
-    tmpfs:
-      - /tmp
-
-#volumes:
-#  boekhoud_data:
-#  boekhoud_uploads:
-#  boekhoud_backups:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://192.168.2.200:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
