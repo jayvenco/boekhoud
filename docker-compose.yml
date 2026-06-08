@@ -8,7 +8,7 @@ services:
       pip install -q --no-cache-dir fastapi 'uvicorn[standard]' sqlalchemy aiosqlite jinja2 python-multipart 'passlib[bcrypt]' itsdangerous starlette pdfplumber pillow pytesseract openai httpx apscheduler python-magic aiofiles openpyxl &&
       uvicorn main:app --host 0.0.0.0 --port 5000 --workers 1"
     ports:
-      - "5000:5000"
+      - "7777:5000"
     volumes:
       - /mnt/user/appdata/boekhoud:/app
       - /mnt/user/appdata/boekhoud/data:/app/data
@@ -20,7 +20,7 @@ services:
       - OLLAMA_BASE_URL=
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://192.168.2.200:5000/health"]
+      test: ["CMD", "curl", "-f", "http://192.168.2.200:7777/health"]
       interval: 30s
       timeout: 10s
       retries: 3
