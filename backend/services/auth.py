@@ -1,18 +1,17 @@
-from passlib.context import CryptContext
+import bcrypt
 from itsdangerous import URLSafeTimedSerializer
 import os
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = os.getenv("SECRET_KEY", "changeme-use-a-strong-secret")
+SECRET_KEY = os.getenv("SECRET_KEY", "changeme-gebruik-een-sterk-wachtwoord")
 serializer = URLSafeTimedSerializer(SECRET_KEY)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 
 def create_session_token(user_id: int) -> str:

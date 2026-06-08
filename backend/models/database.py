@@ -1,15 +1,12 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import text
 from backend.models.models import Base, User, IncomeCategory, ExpenseCategory, CompanySettings
-from passlib.context import CryptContext
+import bcrypt
 import os
 
 DATABASE_URL = f"sqlite+aiosqlite:///{os.getenv('DATA_DIR', '/app/data')}/boekhoud.db"
 
 engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 async def get_db():
@@ -25,13 +22,12 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as session:
-        # Seed income categories
         from sqlalchemy import select
+
+        # Seed income categories
         result = await session.execute(select(IncomeCategory))
         if not result.scalars().first():
-            cats = [
-                IncomeCategory(name="Behandelingen", slug="behandelingen"),
-            ]
+            cats = [IncomeCategory(name="Behandelingen", slug="behandelingen")]
             session.add_all(cats)
 
         # Seed expense categories
@@ -51,10 +47,8 @@ async def init_db():
         # Seed default admin user
         result = await session.execute(select(User))
         if not result.scalars().first():
-            admin = User(
-                username="admin",
-                password_hash=pwd_context.hash("admin123")
-            )
+            pw_hash = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
+            admin = User(username="admin", password_hash=pw_hash)
             session.add(admin)
 
         # Seed company settings
