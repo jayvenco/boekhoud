@@ -13,12 +13,13 @@ UPLOAD_DIR = pathlib.Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", "/app/data"))
 BACKUP_DIR = pathlib.Path(os.getenv("BACKUP_DIR", "/app/backups"))
 
+# Create all required directories immediately at import time
+for _d in [UPLOAD_DIR, DATA_DIR, BACKUP_DIR, pathlib.Path("backend/static")]:
+    _d.mkdir(parents=True, exist_ok=True)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure all directories exist
-    for d in [UPLOAD_DIR, DATA_DIR, BACKUP_DIR, pathlib.Path("backend/static")]:
-        d.mkdir(parents=True, exist_ok=True)
     await init_db()
     yield
 
@@ -26,11 +27,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Boekhoud App", lifespan=lifespan)
 app.add_middleware(SettingsMiddleware)
 
-# Static files
 app.mount("/static", StaticFiles(directory="backend/static"), name="static")
 
 
-# Uploads served via explicit route to avoid 404
 @app.get("/uploads/{full_path:path}")
 async def serve_upload(full_path: str):
     file_path = UPLOAD_DIR / full_path
@@ -40,7 +39,6 @@ async def serve_upload(full_path: str):
     return FileResponse(file_path)
 
 
-# Routers
 app.include_router(auth.router)
 app.include_router(incomes.router)
 app.include_router(expenses.router)
