@@ -53,9 +53,7 @@ async def planned_list(request: Request, db: AsyncSession = Depends(get_db)):
         return user
     result = await db.execute(select(PlannedExpense).order_by(PlannedExpense.planned_date))
     planned = result.scalars().all()
-    return templates.TemplateResponse("planned.html", {
-        "request": request, "planned": planned, "user": user
-    })
+    return templates.TemplateResponse(request, "planned.html", {"planned": planned, "user": user})
 
 
 @router.post("/gepland/nieuw")
@@ -123,10 +121,8 @@ async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
         return user
     result = await db.execute(select(CompanySettings))
     settings = result.scalar_one_or_none()
-    return templates.TemplateResponse("settings.html", {
-        "request": request, "user": user, "settings": settings,
-        "success": request.query_params.get("success")
-    })
+    return templates.TemplateResponse(request, "settings.html", {"user": user, "settings": settings,
+        "success": request.query_params.get("success")})
 
 
 @router.post("/instellingen")
@@ -176,10 +172,8 @@ async def change_password(
     if not verify_password(current_password, user.password_hash):
         result = await db.execute(select(CompanySettings))
         settings = result.scalar_one_or_none()
-        return templates.TemplateResponse("settings.html", {
-            "request": request, "user": user, "settings": settings,
-            "pw_error": "Huidig wachtwoord is onjuist."
-        })
+        return templates.TemplateResponse(request, "settings.html", {"user": user, "settings": settings,
+            "pw_error": "Huidig wachtwoord is onjuist."})
 
     user.password_hash = hash_password(new_password)
     await db.commit()

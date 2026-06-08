@@ -76,9 +76,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     chart_income = [inc_by_month.get(i, 0) for i in range(1, 13)]
     chart_expenses = [exp_by_month.get(i, 0) for i in range(1, 13)]
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "user": user,
+    return templates.TemplateResponse(request, "dashboard.html", {"user": user,
         "total_income": total_income,
         "total_expenses": total_expenses,
         "profit": total_income - total_expenses,
@@ -88,8 +86,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "chart_months": months,
         "chart_income": chart_income,
         "chart_expenses": chart_expenses,
-        "year": year,
-    })
+        "year": year})
 
 
 @router.get("/rapportages", response_class=HTMLResponse)
@@ -146,9 +143,7 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
     total_inc = inc_total.scalar() or 0
     total_exp = exp_total.scalar() or 0
 
-    return templates.TemplateResponse("reports.html", {
-        "request": request,
-        "user": user,
+    return templates.TemplateResponse(request, "reports.html", {"user": user,
         "year": year,
         "years": list(range(2022, datetime.now().year + 2)),
         "income_by_cat": [(r.name, float(r.total)) for r in inc_by_cat],
@@ -156,8 +151,7 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
         "total_income": total_inc,
         "total_expenses": total_exp,
         "profit": total_inc - total_exp,
-        "depreciations": dep_data,
-    })
+        "depreciations": dep_data})
 
 
 @router.get("/export/inkomsten")

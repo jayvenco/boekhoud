@@ -31,7 +31,7 @@ async def require_auth(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html")
 
 
 @router.post("/login")
@@ -44,8 +44,7 @@ async def login(
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse("login.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "login.html", {
             "error": "Ongeldige gebruikersnaam of wachtwoord."
         })
     token = create_session_token(user.id)
@@ -73,11 +72,8 @@ async def change_password(
         return user
     if not verify_password(current_password, user.password_hash):
         result = await db.execute(select(User))
-        return templates.TemplateResponse("settings.html", {
-            "request": request,
-            "user": user,
-            "pw_error": "Huidig wachtwoord is onjuist."
-        })
+        return templates.TemplateResponse(request, "settings.html", {"user": user,
+            "pw_error": "Huidig wachtwoord is onjuist."})
     user.password_hash = hash_password(new_password)
     await db.commit()
     return RedirectResponse("/settings?success=1", status_code=302)

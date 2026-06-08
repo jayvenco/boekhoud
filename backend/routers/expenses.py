@@ -33,10 +33,8 @@ async def list_expenses(request: Request, db: AsyncSession = Depends(get_db)):
     )
     expenses = result.scalars().all()
     cats = await db.execute(select(ExpenseCategory))
-    return templates.TemplateResponse("expenses/list.html", {
-        "request": request, "expenses": expenses,
-        "categories": cats.scalars().all(), "user": user
-    })
+    return templates.TemplateResponse(request, "expenses/list.html", {"expenses": expenses,
+        "categories": cats.scalars().all(), "user": user})
 
 
 @router.get("/nieuw", response_class=HTMLResponse)
@@ -45,9 +43,7 @@ async def new_expense_form(request: Request, db: AsyncSession = Depends(get_db))
     if isinstance(user, RedirectResponse):
         return user
     cats = await db.execute(select(ExpenseCategory))
-    return templates.TemplateResponse("expenses/form.html", {
-        "request": request, "categories": cats.scalars().all(), "expense": None, "user": user
-    })
+    return templates.TemplateResponse(request, "expenses/form.html", {"categories": cats.scalars().all(), "expense": None, "user": user})
 
 
 @router.post("/nieuw")
@@ -76,10 +72,8 @@ async def create_expense(
             receipt_path = await save_receipt(receipt, "uitgaven", cat.slug, invoice_number)
         except ValueError as e:
             cats = await db.execute(select(ExpenseCategory))
-            return templates.TemplateResponse("expenses/form.html", {
-                "request": request, "categories": cats.scalars().all(),
-                "error": str(e), "expense": None, "user": user
-            })
+            return templates.TemplateResponse(request, "expenses/form.html", {"categories": cats.scalars().all(),
+                "error": str(e), "expense": None, "user": user})
 
     depreciable = is_depreciable == "on"
     expense = Expense(
@@ -121,9 +115,7 @@ async def edit_expense_form(id: int, request: Request, db: AsyncSession = Depend
     if not expense:
         raise HTTPException(404)
     cats = await db.execute(select(ExpenseCategory))
-    return templates.TemplateResponse("expenses/form.html", {
-        "request": request, "categories": cats.scalars().all(), "expense": expense, "user": user
-    })
+    return templates.TemplateResponse(request, "expenses/form.html", {"categories": cats.scalars().all(), "expense": expense, "user": user})
 
 
 @router.post("/{id}/bewerken")

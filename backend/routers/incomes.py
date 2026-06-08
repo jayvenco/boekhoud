@@ -35,9 +35,7 @@ async def list_incomes(request: Request, db: AsyncSession = Depends(get_db)):
     incomes = result.scalars().all()
     cats = await db.execute(select(IncomeCategory))
     categories = cats.scalars().all()
-    return templates.TemplateResponse("incomes/list.html", {
-        "request": request, "incomes": incomes, "categories": categories, "user": user
-    })
+    return templates.TemplateResponse(request, "incomes/list.html", {"incomes": incomes, "categories": categories, "user": user})
 
 
 @router.get("/nieuw", response_class=HTMLResponse)
@@ -47,9 +45,7 @@ async def new_income_form(request: Request, db: AsyncSession = Depends(get_db)):
         return user
     cats = await db.execute(select(IncomeCategory))
     categories = cats.scalars().all()
-    return templates.TemplateResponse("incomes/form.html", {
-        "request": request, "categories": categories, "income": None, "user": user
-    })
+    return templates.TemplateResponse(request, "incomes/form.html", {"categories": categories, "income": None, "user": user})
 
 
 @router.post("/nieuw")
@@ -75,10 +71,8 @@ async def create_income(
             receipt_path = await save_receipt(receipt, "inkomsten", cat.slug, invoice_number)
         except ValueError as e:
             cats = await db.execute(select(IncomeCategory))
-            return templates.TemplateResponse("incomes/form.html", {
-                "request": request, "categories": cats.scalars().all(),
-                "error": str(e), "income": None, "user": user
-            })
+            return templates.TemplateResponse(request, "incomes/form.html", {"categories": cats.scalars().all(),
+                "error": str(e), "income": None, "user": user})
 
     income = Income(
         invoice_number=invoice_number,
@@ -106,9 +100,7 @@ async def edit_income_form(id: int, request: Request, db: AsyncSession = Depends
     if not income:
         raise HTTPException(404)
     cats = await db.execute(select(IncomeCategory))
-    return templates.TemplateResponse("incomes/form.html", {
-        "request": request, "categories": cats.scalars().all(), "income": income, "user": user
-    })
+    return templates.TemplateResponse(request, "incomes/form.html", {"categories": cats.scalars().all(), "income": income, "user": user})
 
 
 @router.post("/{id}/bewerken")
