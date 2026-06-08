@@ -24,19 +24,22 @@
   </div>
 </div>
 
+<div style="margin-bottom:16px;">
+  <form method="get" action="/uitgaven" style="display:flex;gap:10px;align-items:center;">
+    <input type="text" name="q" value="{{ q }}" placeholder="Zoek op omschrijving of factuurnummer…"
+           style="max-width:380px;" autofocus>
+    <button type="submit" class="btn btn-outline">Zoeken</button>
+    {% if q %}<a href="/uitgaven" class="btn btn-outline">✕ Wis</a>{% endif %}
+  </form>
+</div>
+
 <div class="table-wrap">
   {% if expenses %}
   <table>
     <thead>
       <tr>
-        <th>Factuurnummer</th>
-        <th>Datum</th>
-        <th>Categorie</th>
-        <th>Omschrijving</th>
-        <th>Bedrag</th>
-        <th>Afschr.</th>
-        <th>Bon</th>
-        <th></th>
+        <th>Factuurnummer</th><th>Datum</th><th>Categorie</th>
+        <th>Omschrijving</th><th>Bedrag</th><th>Afschr.</th><th>Bon</th><th></th>
       </tr>
     </thead>
     <tbody>
@@ -56,7 +59,7 @@
         </td>
         <td>
           {% if e.receipt_path %}
-            <a href="/{{ e.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 Bon</a>
+            <a href="/uploads/{{ e.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 Bon</a>
           {% else %}
             <span style="color:var(--light-text);font-size:13px">—</span>
           {% endif %}
@@ -76,9 +79,13 @@
   {% else %}
   <div class="empty-state">
     <div class="empty-state-icon">🧾</div>
+    {% if q %}
+    <p>Geen resultaten voor "<strong>{{ q }}</strong>".</p>
+    <br><a href="/uitgaven" class="btn btn-outline">Toon alle uitgaven</a>
+    {% else %}
     <p>Nog geen uitgaven geregistreerd.</p>
-    <br>
-    <a href="/uitgaven/nieuw" class="btn btn-primary">Eerste uitgave toevoegen</a>
+    <br><a href="/uitgaven/nieuw" class="btn btn-primary">Eerste uitgave toevoegen</a>
+    {% endif %}
   </div>
   {% endif %}
 </div>

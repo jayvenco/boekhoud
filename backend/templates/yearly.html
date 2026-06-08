@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Jaaroverzicht {{ year }}{% endblock %}
+{% block page_title %}Jaaroverzicht {{ year }}{% endblock %}
+
+{% block topbar_actions %}
+<form method="get" style="display:flex;align-items:center;gap:8px;">
+  <select name="jaar" onchange="this.form.submit()" style="padding:8px 12px;border:1px solid var(--stone);border-radius:8px;font-size:13px;background:white;">
+    {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+  </select>
+</form>
+<a href="/export/jaaroverzicht?jaar={{ year }}" class="btn btn-outline btn-sm">↓ CSV Export</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- KPI cards -->
+<div class="stat-grid" style="margin-bottom:28px;">
+  <div class="stat-card income">
+    <div class="stat-label">Totale inkomsten</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_income) }}</div>
+    <div class="stat-sub">{{ year }}</div>
+  </div>
+  <div class="stat-card expense">
+    <div class="stat-label">Totale uitgaven</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_expenses) }}</div>
+    <div class="stat-sub">{{ year }}</div>
+  </div>
+  <div class="stat-card {% if profit >= 0 %}income{% else %}expense{% endif %}">
+    <div class="stat-label">Netto resultaat</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(profit) }}</div>
+    <div class="stat-sub">Winst / Verlies</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-label">Openstaande facturen</div>
+    <div class="stat-value">{{ unpaid_invoices|length }}</div>
+    <div class="stat-sub">Niet betaald</div>
+  </div>
+</div>
+
+<!-- Chart -->
+<div class="card" style="margin-bottom:28px;">
+  <div class="section-header">
+    <span class="section-title">Maandoverzicht {{ year }}</span>
+  </div>
+  <canvas id="yearChart" height="90"></canvas>
+</div>
+
+<!-- Monthly breakdown table -->
+<div class="card" style="margin-bottom:28px;">
+  <div class="section-title" style="margin-bottom:16px;">Maandelijkse breakdown</div>
+  <div class="table-wrap" style="border:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>Maand</th>
+          <th>Inkomsten</th>
+          <th>Uitgaven</th>
+          <th>Resultaat</th>
+          <th>Cumulatief</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr {% if row.income == 0 and row.expense == 0 %}style="opacity:0.4"{% endif %}>
+          <td style="font-weight:500">{{ row.name }}</td>
+          <td class="amount amount-positive">{% if row.income %}€ {{ "%.2f"|format(row.income) }}{% else %}—{% endif %}</td>
+          <td class="amount amount-negative">{% if row.expense %}€ {{ "%.2f"|format(row.expense) }}{% else %}—{% endif %}</td>
+          <td class="amount {% if row.profit >= 0 %}amount-positive{% else %}amount-negative{% endif %}">
+            € {{ "%.2f"|format(row.profit) }}
+          </td>
+          <td class="amount {% if row.cumulative >= 0 %}amount-positive{% else %}amount-negative{% endif %}">
+            € {{ "%.2f"|format(row.cumulative) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight:600;border-top:2px solid var(--stone);">
+          <td>Totaal</td>
+          <td class="amount amount-positive">€ {{ "%.2f"|format(total_income) }}</td>
+          <td class="amount amount-negative">€ {{ "%.2f"|format(total_expenses) }}</td>
+          <td class="amount {% if profit >= 0 %}amount-positive{% else %}amount-negative{% endif %}">€ {{ "%.2f"|format(profit) }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<!-- Category breakdown -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px;">
+  <div class="card">
+    <div class="section-title" style="margin-bottom:14px;">Inkomsten per categorie</div>
+    {% if income_by_cat %}
+    <table>
+      <thead><tr><th>Categorie</th><th>Bedrag</th><th>%</th></tr></thead>
+      <tbody>
+        {% for name, total in income_by_cat %}
+        <tr>
+          <td>{{ name }}</td>
+          <td class="amount amount-positive">€ {{ "%.2f"|format(total) }}</td>
+          <td style="color:var(--light-text)">{{ "%.0f"|format(total / total_income * 100) if total_income else 0 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty-state"><p>Geen inkomsten in {{ year }}</p></div>{% endif %}
+  </div>
+
+  <div class="card">
+    <div class="section-title" style="margin-bottom:14px;">Uitgaven per categorie</div>
+    {% if expense_by_cat %}
+    <table>
+      <thead><tr><th>Categorie</th><th>Bedrag</th><th>%</th></tr></thead>
+      <tbody>
+        {% for name, total in expense_by_cat %}
+        <tr>
+          <td>{{ name }}</td>
+          <td class="amount amount-negative">€ {{ "%.2f"|format(total) }}</td>
+          <td style="color:var(--light-text)">{{ "%.0f"|format(total / total_expenses * 100) if total_expenses else 0 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty-state"><p>Geen uitgaven in {{ year }}</p></div>{% endif %}
+  </div>
+</div>
+
+<!-- Unpaid invoices -->
+{% if unpaid_invoices %}
+<div class="card" style="margin-bottom:28px;">
+  <div class="section-title" style="margin-bottom:14px;">⚠️ Openstaande facturen {{ year }}</div>
+  <table>
+    <thead><tr><th>Factuurnummer</th><th>Datum</th><th>Omschrijving</th><th>Bedrag</th></tr></thead>
+    <tbody>
+      {% for i in unpaid_invoices %}
+      <tr>
+        <td style="font-weight:500">{{ i.invoice_number }}</td>
+        <td>{{ i.date.strftime("%d.%m.%Y") }}</td>
+        <td>{{ i.description[:50] if i.description else "—" }}</td>
+        <td class="amount amount-positive">€ {{ "%.2f"|format(i.amount) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script>
+new Chart(document.getElementById('yearChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ chart_months | tojson }},
+    datasets: [
+      {
+        label: 'Inkomsten',
+        data: {{ chart_income | tojson }},
+        backgroundColor: 'rgba(90,144,112,0.7)',
+        borderColor: '#5A9070',
+        borderWidth: 1.5,
+        borderRadius: 5,
+        order: 2,
+      },
+      {
+        label: 'Uitgaven',
+        data: {{ chart_expenses | tojson }},
+        backgroundColor: 'rgba(192,102,90,0.5)',
+        borderColor: '#C0665A',
+        borderWidth: 1.5,
+        borderRadius: 5,
+        order: 3,
+      },
+      {
+        label: 'Cumulatief resultaat',
+        data: {{ chart_cumulative | tojson }},
+        type: 'line',
+        borderColor: '#8BA888',
+        backgroundColor: 'rgba(139,168,136,0.1)',
+        borderWidth: 2,
+        pointRadius: 4,
+        tension: 0.3,
+        fill: true,
+        order: 1,
+        yAxisID: 'y',
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top', labels: { font: { family: 'DM Sans', size: 13 } } },
+      tooltip: { callbacks: { label: ctx => `€ ${ctx.parsed.y.toFixed(2)}` } }
+    },
+    scales: {
+      y: {
+        beginAtZero: false,
+        ticks: { callback: v => `€ ${v}`, font: { family: 'DM Sans', size: 12 } },
+        grid: { color: '#E8E3DC' }
+      },
+      x: { ticks: { font: { family: 'DM Sans', size: 12 } }, grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endblock %}

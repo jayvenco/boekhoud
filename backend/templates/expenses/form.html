@@ -61,7 +61,7 @@
         <input type="file" id="receipt" name="receipt" accept=".pdf,.jpg,.jpeg,.png">
         {% if expense and expense.receipt_path %}
         <div style="margin-top:6px;font-size:13px;color:var(--mid)">
-          Huidig: <a href="/{{ expense.receipt_path }}" target="_blank" style="color:var(--sage)">Bekijk bon</a>
+          Huidig: <a href="/uploads/{{ expense.receipt_path }}" target="_blank" style="color:var(--sage)">Bekijk bon</a>
         </div>
         {% endif %}
       </div>

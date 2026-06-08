@@ -9,7 +9,6 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 def get_upload_path(type_: str, category_slug: str) -> Path:
-    """type_: 'inkomsten' or 'uitgaven'"""
     path = UPLOAD_ROOT / type_ / category_slug
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -21,7 +20,7 @@ async def save_receipt(
     category_slug: str,
     invoice_number: str
 ) -> str:
-    """Save uploaded file and return relative path."""
+    """Save uploaded file and return path relative to uploads root (for /uploads/ serving)."""
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise ValueError(f"Bestandstype {ext} niet toegestaan. Gebruik PDF, JPG of PNG.")
@@ -38,13 +37,13 @@ async def save_receipt(
     with open(dest_path, "wb") as f:
         f.write(content)
 
-    # Return relative path for storage
-    return str(dest_path.relative_to(UPLOAD_ROOT.parent.parent if UPLOAD_ROOT.name == "uploads" else UPLOAD_ROOT.parent))
+    # Return path relative to UPLOAD_ROOT for use in /uploads/ URL
+    return str(dest_path.relative_to(UPLOAD_ROOT))
 
 
-def delete_file(path: str):
+def delete_file(relative_path: str):
     try:
-        full = Path("/app") / path if not path.startswith("/") else Path(path)
+        full = UPLOAD_ROOT / relative_path
         if full.exists():
             full.unlink()
     except Exception:

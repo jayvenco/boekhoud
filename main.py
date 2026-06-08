@@ -1,16 +1,24 @@
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from contextlib import asynccontextmanager
 import os
+import pathlib
 
 from backend.models.database import init_db
 from backend.routers import auth, incomes, expenses, dashboard, misc
 from backend.middleware import SettingsMiddleware
 
+UPLOAD_DIR = pathlib.Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", "/app/data"))
+BACKUP_DIR = pathlib.Path(os.getenv("BACKUP_DIR", "/app/backups"))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ensure all directories exist
+    for d in [UPLOAD_DIR, DATA_DIR, BACKUP_DIR, pathlib.Path("backend/static")]:
+        d.mkdir(parents=True, exist_ok=True)
     await init_db()
     yield
 
@@ -18,16 +26,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Boekhoud App", lifespan=lifespan)
 app.add_middleware(SettingsMiddleware)
 
-# Static files - create dirs if missing
-import pathlib
-for d in ["/app/uploads", "/app/backups", "/app/data", "backend/static"]:
-    pathlib.Path(d).mkdir(parents=True, exist_ok=True)
-
+# Static files
 app.mount("/static", StaticFiles(directory="backend/static"), name="static")
-try:
-    app.mount("/uploads", StaticFiles(directory=os.getenv("UPLOAD_DIR", "/app/uploads")), name="uploads")
-except Exception:
-    pass
+
+
+# Uploads served via explicit route to avoid 404
+@app.get("/uploads/{full_path:path}")
+async def serve_upload(full_path: str):
+    file_path = UPLOAD_DIR / full_path
+    if not file_path.exists() or not file_path.is_file():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Bestand niet gevonden")
+    return FileResponse(file_path)
+
 
 # Routers
 app.include_router(auth.router)

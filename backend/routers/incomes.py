@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Form, Depends, UploadFile, File, HTTPExc
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from backend.models.database import get_db
 from backend.models.models import Income, IncomeCategory
@@ -10,14 +10,12 @@ from backend.routers.auth import require_auth
 from backend.services.files import save_receipt, delete_file
 from datetime import date, datetime
 from typing import Optional
-import os
 
 router = APIRouter(prefix="/inkomsten")
 templates = Jinja2Templates(directory="backend/templates")
 
 
 def parse_date(d: str) -> date:
-    """Parse DD.MM.YYYY"""
     try:
         return datetime.strptime(d, "%d.%m.%Y").date()
     except ValueError:
@@ -25,17 +23,25 @@ def parse_date(d: str) -> date:
 
 
 @router.get("", response_class=HTMLResponse)
-async def list_incomes(request: Request, db: AsyncSession = Depends(get_db)):
+async def list_incomes(request: Request, db: AsyncSession = Depends(get_db), q: str = ""):
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
         return user
-    result = await db.execute(
-        select(Income).options(selectinload(Income.category)).order_by(Income.date.desc())
-    )
+
+    query = select(Income).options(selectinload(Income.category)).order_by(Income.date.desc())
+    if q:
+        query = query.where(
+            or_(
+                Income.invoice_number.ilike(f"%{q}%"),
+                Income.description.ilike(f"%{q}%"),
+            )
+        )
+    result = await db.execute(query)
     incomes = result.scalars().all()
     cats = await db.execute(select(IncomeCategory))
-    categories = cats.scalars().all()
-    return templates.TemplateResponse(request, "incomes/list.html", {"incomes": incomes, "categories": categories, "user": user})
+    return templates.TemplateResponse(request, "incomes/list.html", {
+        "incomes": incomes, "categories": cats.scalars().all(), "q": q
+    })
 
 
 @router.get("/nieuw", response_class=HTMLResponse)
@@ -44,8 +50,9 @@ async def new_income_form(request: Request, db: AsyncSession = Depends(get_db)):
     if isinstance(user, RedirectResponse):
         return user
     cats = await db.execute(select(IncomeCategory))
-    categories = cats.scalars().all()
-    return templates.TemplateResponse(request, "incomes/form.html", {"categories": categories, "income": None, "user": user})
+    return templates.TemplateResponse(request, "incomes/form.html", {
+        "categories": cats.scalars().all(), "income": None
+    })
 
 
 @router.post("/nieuw")
@@ -71,17 +78,23 @@ async def create_income(
             receipt_path = await save_receipt(receipt, "inkomsten", cat.slug, invoice_number)
         except ValueError as e:
             cats = await db.execute(select(IncomeCategory))
-            return templates.TemplateResponse(request, "incomes/form.html", {"categories": cats.scalars().all(),
-                "error": str(e), "income": None, "user": user})
+            return templates.TemplateResponse(request, "incomes/form.html", {
+                "categories": cats.scalars().all(), "error": str(e), "income": None
+            })
+
+    # Check duplicate invoice number
+    existing = await db.execute(select(Income).where(Income.invoice_number == invoice_number))
+    if existing.scalar_one_or_none():
+        cats = await db.execute(select(IncomeCategory))
+        return templates.TemplateResponse(request, "incomes/form.html", {
+            "categories": cats.scalars().all(), "income": None,
+            "error": f"Factuurnummer '{invoice_number}' bestaat al. Kies een uniek factuurnummer."
+        })
 
     income = Income(
-        invoice_number=invoice_number,
-        category_id=category_id,
-        date=parse_date(date_str),
-        amount=amount,
-        description=description,
-        status=status,
-        receipt_path=receipt_path
+        invoice_number=invoice_number, category_id=category_id,
+        date=parse_date(date_str), amount=amount, description=description,
+        status=status, receipt_path=receipt_path
     )
     db.add(income)
     await db.commit()
@@ -100,19 +113,17 @@ async def edit_income_form(id: int, request: Request, db: AsyncSession = Depends
     if not income:
         raise HTTPException(404)
     cats = await db.execute(select(IncomeCategory))
-    return templates.TemplateResponse(request, "incomes/form.html", {"categories": cats.scalars().all(), "income": income, "user": user})
+    return templates.TemplateResponse(request, "incomes/form.html", {
+        "categories": cats.scalars().all(), "income": income
+    })
 
 
 @router.post("/{id}/bewerken")
 async def update_income(
-    id: int,
-    request: Request,
-    invoice_number: str = Form(...),
-    category_id: int = Form(...),
-    date_str: str = Form(..., alias="date"),
-    amount: float = Form(...),
-    description: str = Form(""),
-    status: str = Form("niet_betaald"),
+    id: int, request: Request,
+    invoice_number: str = Form(...), category_id: int = Form(...),
+    date_str: str = Form(..., alias="date"), amount: float = Form(...),
+    description: str = Form(""), status: str = Form("niet_betaald"),
     receipt: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db)
 ):
@@ -124,6 +135,17 @@ async def update_income(
     if not income:
         raise HTTPException(404)
 
+    # Check duplicate invoice number (exclude self)
+    dup = await db.execute(select(Income).where(Income.invoice_number == invoice_number, Income.id != id))
+    if dup.scalar_one_or_none():
+        cats = await db.execute(select(IncomeCategory))
+        result2 = await db.execute(select(Income).options(selectinload(Income.category)).where(Income.id == id))
+        inc = result2.scalar_one_or_none()
+        return templates.TemplateResponse(request, "incomes/form.html", {
+            "categories": cats.scalars().all(), "income": inc,
+            "error": f"Factuurnummer '{invoice_number}' bestaat al. Kies een uniek factuurnummer."
+        })
+
     cat = await db.get(IncomeCategory, category_id)
     if receipt and receipt.filename:
         try:
@@ -131,7 +153,7 @@ async def update_income(
             if income.receipt_path:
                 delete_file(income.receipt_path)
             income.receipt_path = new_path
-        except ValueError as e:
+        except ValueError:
             pass
 
     income.invoice_number = invoice_number

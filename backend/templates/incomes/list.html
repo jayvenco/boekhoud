@@ -33,19 +33,22 @@
   </div>
 </div>
 
+<div style="margin-bottom:16px;">
+  <form method="get" action="/inkomsten" style="display:flex;gap:10px;align-items:center;">
+    <input type="text" name="q" value="{{ q }}" placeholder="Zoek op omschrijving of factuurnummer…"
+           style="max-width:380px;" autofocus>
+    <button type="submit" class="btn btn-outline">Zoeken</button>
+    {% if q %}<a href="/inkomsten" class="btn btn-outline">✕ Wis</a>{% endif %}
+  </form>
+</div>
+
 <div class="table-wrap">
   {% if incomes %}
   <table>
     <thead>
       <tr>
-        <th>Factuurnummer</th>
-        <th>Datum</th>
-        <th>Categorie</th>
-        <th>Omschrijving</th>
-        <th>Bedrag</th>
-        <th>Status</th>
-        <th>Bon</th>
-        <th></th>
+        <th>Factuurnummer</th><th>Datum</th><th>Categorie</th>
+        <th>Omschrijving</th><th>Bedrag</th><th>Status</th><th>Bon</th><th></th>
       </tr>
     </thead>
     <tbody>
@@ -65,7 +68,7 @@
         </td>
         <td>
           {% if i.receipt_path %}
-            <a href="/{{ i.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 Bon</a>
+            <a href="/uploads/{{ i.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 Bon</a>
           {% else %}
             <span style="color:var(--light-text);font-size:13px">—</span>
           {% endif %}
@@ -85,9 +88,13 @@
   {% else %}
   <div class="empty-state">
     <div class="empty-state-icon">💶</div>
+    {% if q %}
+    <p>Geen resultaten voor "<strong>{{ q }}</strong>".</p>
+    <br><a href="/inkomsten" class="btn btn-outline">Toon alle inkomsten</a>
+    {% else %}
     <p>Nog geen inkomsten geregistreerd.</p>
-    <br>
-    <a href="/inkomsten/nieuw" class="btn btn-primary">Eerste inkomst toevoegen</a>
+    <br><a href="/inkomsten/nieuw" class="btn btn-primary">Eerste inkomst toevoegen</a>
+    {% endif %}
   </div>
   {% endif %}
 </div>
