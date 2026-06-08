@@ -3,7 +3,7 @@ services:
     build: .
     container_name: boekhoud-app
     ports:
-      - "5000:8000"
+      - "5000:5000"
     volumes:
       - /mnt/user/appdata/boekhoud/data:/app/data
       - /mnt/user/appdata/boekhoud/uploads:/app/uploads
