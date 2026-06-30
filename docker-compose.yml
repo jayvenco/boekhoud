@@ -1,9 +1,7 @@
 services:
   boekhoud:
-    build:
-      # Code wordt direct van GitHub gehaald en gebouwd
-      context: https://github.com/jayvenco/boekhoud.git
-      dockerfile: Dockerfile
+    # Image wordt automatisch gebouwd via GitHub Actions en gepubliceerd op GHCR
+    image: ghcr.io/jayvenco/boekhoud:latest
     container_name: boekhoud-app
     ports:
       - "7777:5000"
