@@ -3,6 +3,8 @@
 {% block page_title %}Inkomsten{% endblock %}
 
 {% block topbar_actions %}
+{% set qs = request.url.query %}
+<a href="/inkomsten/export/pdf{% if qs %}?{{ qs }}{% endif %}" class="btn btn-outline btn-sm" target="_blank">↓ PDF</a>
 <a href="/inkomsten/nieuw" class="btn btn-primary">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
   Nieuwe inkomst
@@ -18,10 +20,11 @@
   {% if i.status == "betaald" %}{% set paid.val = paid.val + i.amount %}{% else %}{% set unpaid.val = unpaid.val + i.amount %}{% endif %}
 {% endfor %}
 
-<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
   <div class="stat-card income">
     <div class="stat-label">Totaal inkomsten</div>
     <div class="stat-value amount">€ {{ "%.2f"|format(total.val) }}</div>
+    <div class="stat-sub">{{ incomes|length }} records</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Ontvangen</div>
@@ -33,12 +36,70 @@
   </div>
 </div>
 
-<div style="margin-bottom:16px;">
-  <form method="get" action="/inkomsten" style="display:flex;gap:10px;align-items:center;">
-    <input type="text" name="q" value="{{ q }}" placeholder="Zoek op omschrijving of factuurnummer…"
-           style="max-width:380px;" autofocus>
-    <button type="submit" class="btn btn-outline">Zoeken</button>
-    {% if q %}<a href="/inkomsten" class="btn btn-outline">✕ Wis</a>{% endif %}
+<!-- Filter paneel -->
+<div class="card" style="margin-bottom:16px;padding:16px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:{% if active_filters > 0 %}14px{% else %}0{% endif %};">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-weight:600;font-size:13px;color:var(--dark);">Filters</span>
+      {% if active_filters > 0 %}
+      <span class="badge badge-success">{{ active_filters }} actief</span>
+      {% endif %}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      {% if active_filters > 0 %}
+      <a href="/inkomsten" class="btn btn-outline btn-xs">✕ Wis</a>
+      {% endif %}
+      <button type="button" onclick="toggleFilters()" class="btn btn-outline btn-xs" id="filterToggleBtn">
+        {% if active_filters > 0 %}Verberg{% else %}Toon{% endif %} filters
+      </button>
+    </div>
+  </div>
+
+  <form method="get" action="/inkomsten" id="filterForm"
+        style="display:{% if active_filters > 0 %}block{% else %}none{% endif %};">
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px;">
+      <div class="form-group">
+        <label>Zoeken</label>
+        <input type="text" name="q" value="{{ filters.q }}" placeholder="Factuurnummer, omschrijving…">
+      </div>
+      <div class="form-group">
+        <label>Van datum</label>
+        <input type="date" name="from_date" value="{{ filters.from_date }}">
+      </div>
+      <div class="form-group">
+        <label>Tot datum</label>
+        <input type="date" name="to_date" value="{{ filters.to_date }}">
+      </div>
+      <div class="form-group">
+        <label>Categorie</label>
+        <select name="category_id">
+          <option value="">— Alle —</option>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if filters.category_id == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Boekjaar</label>
+        <input type="number" name="year" value="{{ filters.year }}" placeholder="2025" min="2000" max="2099">
+      </div>
+      <div class="form-group">
+        <label>Min bedrag (€)</label>
+        <input type="number" name="min_amount" value="{{ filters.min_amount }}" placeholder="0.00" step="0.01" min="0">
+      </div>
+      <div class="form-group">
+        <label>Max bedrag (€)</label>
+        <input type="number" name="max_amount" value="{{ filters.max_amount }}" placeholder="9999.99" step="0.01" min="0">
+      </div>
+      <div class="form-group">
+        <label>Contact</label>
+        <input type="text" name="contact" value="{{ filters.contact }}" placeholder="Naam, e-mail of telefoon…">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn-primary btn-sm">Toepassen</button>
+      <a href="/inkomsten" class="btn btn-outline btn-sm">Wis filters</a>
+    </div>
   </form>
 </div>
 
@@ -107,9 +168,9 @@
   {% else %}
   <div class="empty-state">
     <div class="empty-state-icon">💶</div>
-    {% if q %}
-    <p>Geen resultaten voor "<strong>{{ q }}</strong>".</p>
-    <br><a href="/inkomsten" class="btn btn-outline">Toon alle inkomsten</a>
+    {% if active_filters > 0 %}
+    <p>Geen inkomsten gevonden voor de ingestelde filters.</p>
+    <br><a href="/inkomsten" class="btn btn-outline">Wis alle filters</a>
     {% else %}
     <p>Nog geen inkomsten geregistreerd.</p>
     <br><a href="/inkomsten/nieuw" class="btn btn-primary">Eerste inkomst toevoegen</a>
@@ -117,4 +178,14 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+function toggleFilters() {
+  const form = document.getElementById('filterForm');
+  const btn = document.getElementById('filterToggleBtn');
+  const visible = form.style.display !== 'none';
+  form.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? 'Toon filters' : 'Verberg filters';
+}
+</script>
 {% endblock %}

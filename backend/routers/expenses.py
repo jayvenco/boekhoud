@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request, Form, Depends, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from backend.models.database import get_db
@@ -12,6 +12,7 @@ from backend.services.files import save_receipts, delete_file, move_tmp_to_categ
 from backend.services.i18n import t
 from backend.services.invoice_numbering import get_numbering_settings
 from backend.services.fiscal_year import is_year_locked, get_locked_years
+from backend.services.pdf_export import generate_expenses_pdf
 from datetime import date, datetime
 import calendar
 from typing import Optional, List
@@ -106,8 +107,61 @@ async def get_series_root(db: AsyncSession, expense: Expense) -> Expense:
     return expense
 
 
+def _apply_expense_filters(query, q, from_date, to_date, category_id, year,
+                           min_amount, max_amount, contact):
+    def try_date(s):
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
+            try:
+                return datetime.strptime(s.strip(), fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    if q:
+        query = query.where(or_(
+            Expense.invoice_number.ilike(f"%{q}%"),
+            Expense.description.ilike(f"%{q}%"),
+        ))
+    if from_date:
+        d = try_date(from_date)
+        if d:
+            query = query.where(Expense.date >= d)
+    if to_date:
+        d = try_date(to_date)
+        if d:
+            query = query.where(Expense.date <= d)
+    if category_id:
+        try:
+            query = query.where(Expense.category_id == int(category_id))
+        except ValueError:
+            pass
+    if year:
+        query = query.where(func.strftime("%Y", Expense.date) == str(year))
+    if min_amount:
+        try:
+            query = query.where(Expense.amount >= float(min_amount))
+        except ValueError:
+            pass
+    if max_amount:
+        try:
+            query = query.where(Expense.amount <= float(max_amount))
+        except ValueError:
+            pass
+    if contact:
+        query = query.where(or_(
+            Expense.invoice_number.ilike(f"%{contact}%"),
+            Expense.description.ilike(f"%{contact}%"),
+        ))
+    return query
+
+
 @router.get("", response_class=HTMLResponse)
-async def list_expenses(request: Request, db: AsyncSession = Depends(get_db), q: str = ""):
+async def list_expenses(
+    request: Request, db: AsyncSession = Depends(get_db),
+    q: str = "", from_date: str = "", to_date: str = "",
+    category_id: str = "", year: str = "",
+    min_amount: str = "", max_amount: str = "", contact: str = "",
+):
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
         return user
@@ -116,19 +170,61 @@ async def list_expenses(request: Request, db: AsyncSession = Depends(get_db), q:
         selectinload(Expense.depreciation),
         selectinload(Expense.receipts)
     ).order_by(Expense.date.desc())
-    if q:
-        query = query.where(or_(
-            Expense.invoice_number.ilike(f"%{q}%"),
-            Expense.description.ilike(f"%{q}%"),
-        ))
+    query = _apply_expense_filters(query, q, from_date, to_date, category_id,
+                                   year, min_amount, max_amount, contact)
     result = await db.execute(query)
     expenses = result.scalars().all()
     cats = await db.execute(select(ExpenseCategory))
     locked_years = await get_locked_years(db)
+    filters = {"q": q, "from_date": from_date, "to_date": to_date,
+               "category_id": category_id, "year": year,
+               "min_amount": min_amount, "max_amount": max_amount, "contact": contact}
     return templates.TemplateResponse(request, "expenses/list.html", {
-        "expenses": expenses, "categories": cats.scalars().all(), "q": q,
+        "expenses": expenses, "categories": cats.scalars().all(),
         "today": date.today(), "locked_years": locked_years,
+        "filters": filters,
+        "active_filters": sum(1 for v in filters.values() if v),
     })
+
+
+@router.get("/export/pdf")
+async def export_expenses_pdf(
+    request: Request, db: AsyncSession = Depends(get_db),
+    q: str = "", from_date: str = "", to_date: str = "",
+    category_id: str = "", year: str = "",
+    min_amount: str = "", max_amount: str = "", contact: str = "",
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    query = select(Expense).options(
+        selectinload(Expense.category),
+        selectinload(Expense.receipts)
+    ).order_by(Expense.date.desc())
+    query = _apply_expense_filters(query, q, from_date, to_date, category_id,
+                                   year, min_amount, max_amount, contact)
+    result = await db.execute(query)
+    expenses = result.scalars().all()
+
+    parts = []
+    if q:           parts.append(f"Zoeken: {q}")
+    if from_date:   parts.append(f"Van: {from_date}")
+    if to_date:     parts.append(f"Tot: {to_date}")
+    if year:        parts.append(f"Boekjaar: {year}")
+    if min_amount:  parts.append(f"Min: €{min_amount}")
+    if max_amount:  parts.append(f"Max: €{max_amount}")
+    if contact:     parts.append(f"Contact: {contact}")
+    if category_id:
+        cat_r = await db.get(ExpenseCategory, int(category_id))
+        if cat_r:   parts.append(f"Categorie: {cat_r.name}")
+    filters_desc = " | ".join(parts)
+
+    settings = request.state.settings
+    company = settings.company_name if settings else ""
+    buf = generate_expenses_pdf(expenses, company_name=company, filters_desc=filters_desc)
+    filename = f"uitgaven_{datetime.now().strftime('%Y%m%d')}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
 @router.get("/nieuw", response_class=HTMLResponse)
