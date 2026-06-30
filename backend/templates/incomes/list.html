@@ -48,14 +48,14 @@
     <thead>
       <tr>
         <th>Factuurnummer</th><th>Datum</th><th>Categorie</th>
-        <th>Omschrijving</th><th>Bedrag</th><th>Status</th><th>Bon</th><th></th>
+        <th>Omschrijving</th><th>Bedrag</th><th>Status</th><th>Ontvangen op</th><th>{{ t('receipt_table_header') }}</th><th></th>
       </tr>
     </thead>
     <tbody>
       {% for i in incomes %}
       <tr>
         <td style="font-weight:500;color:var(--dark)">{{ i.invoice_number }}</td>
-        <td>{{ i.date.strftime("%d.%m.%Y") }}</td>
+        <td>{{ i.date.strftime("%d-%m-%Y") }}</td>
         <td><span class="badge badge-neutral">{{ i.category.name }}</span></td>
         <td style="color:var(--light-text)">{{ i.description[:40] if i.description else "—" }}</td>
         <td class="amount amount-positive">€ {{ "%.2f"|format(i.amount) }}</td>
@@ -67,8 +67,22 @@
           {% endif %}
         </td>
         <td>
-          {% if i.receipt_path %}
-            <a href="/uploads/{{ i.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 Bon</a>
+          <span class="badge badge-neutral">
+            {% if i.received_via == 'overig' and i.received_via_other %}{{ i.received_via_other }}
+            {% else %}{{ received_via_labels.get(i.received_via, i.received_via) }}{% endif %}
+          </span>
+        </td>
+        <td>
+          {% if i.receipts %}
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            {% for r in i.receipts %}
+              <a href="/uploads/{{ r.file_path }}" target="_blank" class="btn btn-outline btn-xs">
+                📎{% if r.suffix %}-{{ r.suffix }}{% endif %}
+              </a>
+            {% endfor %}
+            </div>
+          {% elif i.receipt_path %}
+            <a href="/uploads/{{ i.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 {{ t('receipt_button_label') }}</a>
           {% else %}
             <span style="color:var(--light-text);font-size:13px">—</span>
           {% endif %}

@@ -15,7 +15,7 @@
           {% for p in planned %}
           <tr>
             <td style="font-weight:500;color:var(--dark)">{{ p.title }}</td>
-            <td>{{ p.planned_date.strftime("%d.%m.%Y") if p.planned_date else "—" }}</td>
+            <td>{{ p.planned_date.strftime("%d-%m-%Y") if p.planned_date else "—" }}</td>
             <td class="amount">{% if p.amount %}€ {{ "%.2f"|format(p.amount) }}{% else %}—{% endif %}</td>
             <td style="color:var(--light-text)">{{ p.description[:40] if p.description else "—" }}</td>
             <td>

@@ -81,7 +81,7 @@
 {% if depreciations %}
 <div class="card">
   <div class="section-title" style="margin-bottom:4px;">Afschrijvingsoverzicht</div>
-  <p style="font-size:13px;color:var(--light-text);margin-bottom:20px;">Lineaire afschrijving — 20% per jaar over 5 jaar</p>
+  <p style="font-size:13px;color:var(--light-text);margin-bottom:20px;">Lineaire afschrijving over de gekozen looptijd, na aftrek van restwaarde</p>
 
   {% for dep in depreciations %}
   <div style="margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--stone);">
@@ -96,11 +96,16 @@
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;">
       <div style="background:var(--cream);border-radius:8px;padding:12px;">
         <div style="font-size:11px;color:var(--light-text);text-transform:uppercase;letter-spacing:.06em;">Per jaar</div>
         <div style="font-weight:600;color:var(--dark);">€ {{ "%.2f"|format(dep.annual) }}</div>
-        <div style="font-size:11px;color:var(--light-text);">{{ dep.percentage|int }}% per jaar</div>
+        <div style="font-size:11px;color:var(--light-text);">{{ dep.duration }} jaar</div>
+      </div>
+      <div style="background:var(--cream);border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--light-text);text-transform:uppercase;letter-spacing:.06em;">Restwaarde</div>
+        <div style="font-weight:600;color:var(--dark);">€ {{ "%.2f"|format(dep.residual) }}</div>
+        <div style="font-size:11px;color:var(--light-text);">Na looptijd</div>
       </div>
       <div style="background:var(--cream);border-radius:8px;padding:12px;">
         <div style="font-size:11px;color:var(--light-text);text-transform:uppercase;letter-spacing:.06em;">Afgeschreven</div>
@@ -108,19 +113,20 @@
         <div style="font-size:11px;color:var(--light-text);">{{ dep.start_year }} – heden</div>
       </div>
       <div style="background:var(--cream);border-radius:8px;padding:12px;">
-        <div style="font-size:11px;color:var(--light-text);text-transform:uppercase;letter-spacing:.06em;">Restwaarde</div>
-        <div style="font-weight:600;color:var(--success);">€ {{ "%.2f"|format(dep.remaining) }}</div>
+        <div style="font-size:11px;color:var(--light-text);text-transform:uppercase;letter-spacing:.06em;">Boekwaarde</div>
+        <div style="font-weight:600;color:var(--success);">€ {{ "%.2f"|format(dep.book_value) }}</div>
         <div style="font-size:11px;color:var(--light-text);">Huidig</div>
       </div>
       <div style="background:var(--cream);border-radius:8px;padding:12px;">
         <div style="font-size:11px;color:var(--light-text);text-transform:uppercase;letter-spacing:.06em;">Volledig afgeschr.</div>
         <div style="font-weight:600;color:var(--dark);">{{ dep.end_year }}</div>
-        <div style="font-size:11px;color:var(--light-text);">{{ dep.duration }} jaar looptijd</div>
+        <div style="font-size:11px;color:var(--light-text);">looptijd</div>
       </div>
     </div>
 
     <!-- Progress bar -->
-    {% set pct = ((dep.purchase - dep.remaining) / dep.purchase * 100) if dep.purchase else 0 %}
+    {% set depreciable_base = dep.purchase - dep.residual %}
+    {% set pct = ((dep.purchase - dep.book_value) / depreciable_base * 100) if depreciable_base else 0 %}
     <div style="background:var(--stone);border-radius:4px;height:8px;margin-bottom:16px;">
       <div style="background:var(--sage);height:8px;border-radius:4px;width:{{ pct|int }}%;transition:width .3s;"></div>
     </div>
@@ -130,7 +136,7 @@
     <table>
       <thead>
         <tr>
-          <th>Jaar</th><th>Afschrijving</th><th>Cumulatief</th><th>Restwaarde</th>
+          <th>Jaar</th><th>Afschrijving</th><th>Cumulatief</th><th>Boekwaarde</th>
         </tr>
       </thead>
       <tbody>
@@ -142,7 +148,7 @@
           </td>
           <td class="amount amount-negative">€ {{ "%.2f"|format(s.amount) }}</td>
           <td class="amount">€ {{ "%.2f"|format(s.cumulative) }}</td>
-          <td class="amount {% if s.remaining > 0 %}amount-positive{% else %}amount-negative{% endif %}">€ {{ "%.2f"|format(s.remaining) }}</td>
+          <td class="amount {% if s.book_value > dep.residual %}amount-positive{% else %}amount-negative{% endif %}">€ {{ "%.2f"|format(s.book_value) }}</td>
         </tr>
         {% endfor %}
       </tbody>

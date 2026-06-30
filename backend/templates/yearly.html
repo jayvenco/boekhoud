@@ -9,9 +9,43 @@
   </select>
 </form>
 <a href="/export/jaaroverzicht?jaar={{ year }}" class="btn btn-outline btn-sm">↓ CSV Export</a>
+{% if not closure %}
+<form method="post" action="/jaaroverzicht/afsluiten" onsubmit="return confirm('Boekjaar {{ year }} afsluiten?')">
+  <input type="hidden" name="jaar" value="{{ year }}">
+  <button type="submit" class="btn btn-primary btn-sm">Boekjaar afsluiten</button>
+</form>
+{% endif %}
 {% endblock %}
 
 {% block content %}
+
+{% if request.query_params.get('closed') == '1' %}
+<div class="alert alert-success" style="margin-bottom:20px;">✅ Boekjaar {{ year }} is afgesloten.</div>
+{% endif %}
+
+{% if closure %}
+<div class="alert alert-success" style="margin-bottom:20px;">
+  ✅ Boekjaar {{ year }} is afgesloten op {{ closure.closed_at.strftime("%d-%m-%Y %H:%M") }}.
+  {% if closure.open_items_at_closure %}({{ closure.open_items_at_closure }} checklist-item(s) stonden toen nog open.){% endif %}
+</div>
+{% endif %}
+
+{% if warn_open_items and open_checklist_items %}
+<div class="alert alert-error" style="margin-bottom:20px;">
+  <div style="font-weight:600;margin-bottom:8px;">⚠️ Er staan nog {{ open_checklist_items|length }} controlechecklist-item(s) open:</div>
+  <ul style="margin:0 0 14px 18px;padding:0;">
+    {% for item in open_checklist_items %}
+    <li>{{ item.title }}</li>
+    {% endfor %}
+  </ul>
+  <p style="font-size:13px;margin-bottom:10px;">Je kunt eerst de <a href="/checklist" style="color:var(--green);">checklist aanvullen</a>, of het boekjaar alsnog afsluiten.</p>
+  <form method="post" action="/jaaroverzicht/afsluiten" onsubmit="return confirm('Boekjaar {{ year }} afsluiten terwijl er nog openstaande checklist-items zijn?')">
+    <input type="hidden" name="jaar" value="{{ year }}">
+    <input type="hidden" name="force" value="on">
+    <button type="submit" class="btn btn-danger btn-sm">Toch afsluiten</button>
+  </form>
+</div>
+{% endif %}
 
 <!-- KPI cards -->
 <div class="stat-grid" style="margin-bottom:28px;">
@@ -136,7 +170,7 @@
       {% for i in unpaid_invoices %}
       <tr>
         <td style="font-weight:500">{{ i.invoice_number }}</td>
-        <td>{{ i.date.strftime("%d.%m.%Y") }}</td>
+        <td>{{ i.date.strftime("%d-%m-%Y") }}</td>
         <td>{{ i.description[:50] if i.description else "—" }}</td>
         <td class="amount amount-positive">€ {{ "%.2f"|format(i.amount) }}</td>
       </tr>

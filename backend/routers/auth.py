@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.database import get_db
 from backend.models.models import User
-from backend.services.auth import verify_password, hash_password, create_session_token, verify_session_token
+from backend.services.auth import verify_password, create_session_token, verify_session_token
 
 router = APIRouter()
 templates = Jinja2Templates(directory="backend/templates")
@@ -60,20 +60,3 @@ async def logout():
     return response
 
 
-@router.post("/settings/password")
-async def change_password(
-    request: Request,
-    current_password: str = Form(...),
-    new_password: str = Form(...),
-    db: AsyncSession = Depends(get_db)
-):
-    user = await require_auth(request, db)
-    if isinstance(user, RedirectResponse):
-        return user
-    if not verify_password(current_password, user.password_hash):
-        result = await db.execute(select(User))
-        return templates.TemplateResponse(request, "settings.html", {"user": user,
-            "pw_error": "Huidig wachtwoord is onjuist."})
-    user.password_hash = hash_password(new_password)
-    await db.commit()
-    return RedirectResponse("/settings?success=1", status_code=302)

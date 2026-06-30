@@ -39,14 +39,26 @@
     <thead>
       <tr>
         <th>Factuurnummer</th><th>Datum</th><th>Categorie</th>
-        <th>Omschrijving</th><th>Bedrag</th><th>Afschr.</th><th>Bon</th><th></th>
+        <th>Omschrijving</th><th>Bedrag</th><th>Afschr.</th><th>{{ t('receipt_table_header') }}</th><th></th>
       </tr>
     </thead>
     <tbody>
       {% for e in expenses %}
       <tr>
-        <td style="font-weight:500;color:var(--dark)">{{ e.invoice_number }}</td>
-        <td>{{ e.date.strftime("%d.%m.%Y") }}</td>
+        <td style="font-weight:500;color:var(--dark)">
+          {{ e.invoice_number }}
+          {% if "-AFW" in e.invoice_number %}
+            <span class="badge badge-neutral" style="font-size:10px;margin-left:4px;">afschrijving</span>
+          {% endif %}
+          {% if e.is_recurring %}
+            <span class="badge badge-warning" style="font-size:10px;margin-left:4px;" title="{{ t('recurring_badge') }}">
+              🔁 {{ t('recurring_badge') }}
+              {% if e.recurring_frequency %} — {{ {"maandelijks":"Maandelijks","per_kwartaal":"Per kwartaal","halfjaarlijks":"Halfjaarlijks","jaarlijks":"Jaarlijks"}.get(e.recurring_frequency, e.recurring_frequency) }}{% endif %}
+            </span>
+            {% if e.is_auto_generated %}<span class="badge badge-neutral" style="font-size:10px;margin-left:4px;">auto</span>{% endif %}
+          {% endif %}
+        </td>
+        <td>{{ e.date.strftime("%d-%m-%Y") }}</td>
         <td><span class="badge badge-neutral">{{ e.category.name }}</span></td>
         <td style="color:var(--light-text)">{{ e.description[:40] if e.description else "—" }}</td>
         <td class="amount amount-negative">€ {{ "%.2f"|format(e.amount) }}</td>
@@ -58,8 +70,20 @@
           {% endif %}
         </td>
         <td>
-          {% if e.receipt_path %}
-            <a href="/uploads/{{ e.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 Bon</a>
+          {% if e.receipts %}
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            {% for r in e.receipts %}
+              <a href="/uploads/{{ r.file_path }}" target="_blank" class="btn btn-outline btn-xs">
+                📎{% if r.suffix %}-{{ r.suffix }}{% endif %}
+              </a>
+            {% endfor %}
+            </div>
+          {% elif e.receipt_path %}
+            <a href="/uploads/{{ e.receipt_path }}" target="_blank" class="btn btn-outline btn-xs">📎 {{ t('receipt_button_label') }}</a>
+          {% elif e.is_recurring %}
+            <span class="badge {% if e.date <= today %}badge-danger{% else %}badge-neutral{% endif %}" style="font-size:10px;">
+              {{ t('recurring_receipt_missing') }}
+            </span>
           {% else %}
             <span style="color:var(--light-text);font-size:13px">—</span>
           {% endif %}
