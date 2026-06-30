@@ -4,82 +4,22 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.database import get_db
-from backend.models.backup_database import get_backup_db
-from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense
+from backend.models.models import PlannedExpense, CompanySettings, User
 from backend.routers.auth import require_auth
 from backend.services.ocr import process_receipt
-from backend.services.files import save_receipts, UPLOAD_ROOT
+from backend.services.files import save_receipt, UPLOAD_ROOT
 from backend.services.auth import hash_password
-from backend.services.ai_providers import PROVIDERS
-from backend.services.crypto import decrypt, mask
-from backend.services.invoice_numbering import get_next_invoice_number, get_numbering_settings
-from backend.models.models import InvoiceNumberingSettings
-from backend.services.i18n import t
-from datetime import datetime
+import shutil
+import os
+from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
 router = APIRouter()
 templates = Jinja2Templates(directory="backend/templates")
-templates.env.globals["t"] = t
 
-
-# ── Factuurnummer ─────────────────────────────────────────
-@router.get("/api/volgend-factuurnummer")
-async def next_invoice_number(
-    request: Request,
-    jaar: int = 0,
-    type: str = "inkomsten",
-    db: AsyncSession = Depends(get_db)
-):
-    """Geeft het volgende vrije factuurnummer voor het opgegeven boekjaar terug."""
-    if not jaar:
-        jaar = datetime.now().year
-
-    settings = await get_numbering_settings(db)
-    if not settings.auto_enabled:
-        return {"invoice_number": None, "auto_enabled": False}
-
-    invoice = await get_next_invoice_number(db, jaar, type, settings)
-    return {"invoice_number": invoice, "auto_enabled": True}
-
-
-def _validate_invoice_template(template: str) -> Optional[str]:
-    """Alleen de plaatshouders {year} en {number} zijn toegestaan (geen vrije format-strings).
-    Geeft het opgeschoonde template terug, of None als het ongeldig is."""
-    import re
-    template = template.strip() or "{year}-{number}"
-    placeholders = re.findall(r"\{[^{}]*\}", template)
-    if "{year}" not in template or any(p not in ("{year}", "{number}") for p in placeholders):
-        return None
-    return template
-
-
-@router.post("/instellingen/factuurnummering")
-async def update_invoice_numbering_settings(
-    request: Request,
-    auto_enabled: Optional[str] = Form(None),
-    padding: int = Form(3),
-    format_template_income: str = Form("I-{year}-{number}"),
-    format_template_expense: str = Form("U-{year}-{number}"),
-    db: AsyncSession = Depends(get_db)
-):
-    user = await require_auth(request, db)
-    if isinstance(user, RedirectResponse):
-        return user
-
-    template_income = _validate_invoice_template(format_template_income)
-    template_expense = _validate_invoice_template(format_template_expense)
-    if template_income is None or template_expense is None:
-        return RedirectResponse("/instellingen?error=factuurformaat", status_code=302)
-
-    settings = await get_numbering_settings(db)
-    settings.auto_enabled = auto_enabled == "on"
-    settings.padding = max(1, min(10, padding or 3))
-    settings.format_template_income = template_income
-    settings.format_template_expense = template_expense
-    await db.commit()
-    return RedirectResponse("/instellingen?success=1", status_code=302)
+BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/app/backups"))
+DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 
 
 # ── OCR ────────────────────────────────────────────────
@@ -91,38 +31,18 @@ async def ocr_upload(
 ):
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
-        return JSONResponse({"error": "Niet ingelogd"}, status_code=401)
+        return user
 
-    try:
-        filename = file.filename or "upload"
-        safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
-        if not safe_name:
-            safe_name = "upload.pdf"
+    # Save to temp
+    tmp_path = UPLOAD_ROOT / "tmp" / file.filename
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+    content = await file.read()
+    with open(tmp_path, "wb") as f:
+        f.write(content)
 
-        tmp_dir = UPLOAD_ROOT / "tmp"
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-
-        # Use unique temp name to avoid collisions
-        import uuid
-        tmp_id = str(uuid.uuid4())[:8]
-        ext = Path(safe_name).suffix or ".pdf"
-        tmp_filename = f"ocr_{tmp_id}{ext}"
-        tmp_path = tmp_dir / tmp_filename
-
-        file_content = await file.read()
-        if not file_content:
-            return JSONResponse({"error": "Leeg bestand ontvangen."})
-
-        with open(tmp_path, "wb") as f:
-            f.write(file_content)
-
-        result = await process_receipt(str(tmp_path), db)
-        # Keep the temp file and return its ID so the form can reference it
-        result["_tmp_file"] = tmp_filename
-        result["_original_filename"] = safe_name
-        return JSONResponse(result)
-    except Exception as e:
-        return JSONResponse({"error": f"Verwerkingsfout: {str(e)}"})
+    result = await process_receipt(str(tmp_path))
+    tmp_path.unlink(missing_ok=True)
+    return JSONResponse(result)
 
 
 # ── Planned Expenses ───────────────────────────────────
@@ -195,40 +115,14 @@ async def update_planned_status(
 
 # ── Settings ───────────────────────────────────────────
 @router.get("/instellingen", response_class=HTMLResponse)
-async def settings_page(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    backup_db: AsyncSession = Depends(get_backup_db),
-):
+async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
         return user
     result = await db.execute(select(CompanySettings))
     settings = result.scalar_one_or_none()
-    result = await backup_db.execute(select(BackupSettings))
-    backup_settings = result.scalar_one_or_none()
-
-    result = await db.execute(select(AISettings))
-    ai_settings = result.scalar_one_or_none()
-    ai_provider_models = {pid: [{"id": m.id, "label": m.label} for m in p.models] for pid, p in PROVIDERS.items()}
-    ai_key_masks = {}
-    if ai_settings:
-        if ai_settings.openai_api_key_encrypted:
-            ai_key_masks["openai"] = mask(decrypt(ai_settings.openai_api_key_encrypted))
-        if ai_settings.anthropic_api_key_encrypted:
-            ai_key_masks["anthropic"] = mask(decrypt(ai_settings.anthropic_api_key_encrypted))
-
-    invoice_numbering_settings = await get_numbering_settings(db)
-
     return templates.TemplateResponse(request, "settings.html", {"user": user, "settings": settings,
-        "backup_settings": backup_settings,
-        "ai_settings": ai_settings,
-        "ai_providers": PROVIDERS,
-        "ai_provider_models": ai_provider_models,
-        "ai_key_masks": ai_key_masks,
-        "invoice_numbering_settings": invoice_numbering_settings,
-        "success": request.query_params.get("success"),
-        "error": request.query_params.get("error")})
+        "success": request.query_params.get("success")})
 
 
 @router.post("/instellingen")
@@ -284,3 +178,19 @@ async def change_password(
     user.password_hash = hash_password(new_password)
     await db.commit()
     return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
+# ── Backup ─────────────────────────────────────────────
+@router.post("/backup/maak")
+async def create_backup(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    src = DATA_DIR / "boekhoud.db"
+    if src.exists():
+        dst = BACKUP_DIR / f"boekhoud_{ts}.db"
+        shutil.copy2(src, dst)
+    return RedirectResponse("/instellingen?success=backup", status_code=302)

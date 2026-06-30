@@ -1,17 +1,11 @@
 import os
 import json
-import logging
 import re
 from pathlib import Path
 import pytesseract
 from PIL import Image
 import pdfplumber
 import httpx
-
-from backend.services.ai_providers import get_provider
-from backend.services.crypto import decrypt
-
-logger = logging.getLogger("boekhoud.ocr")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "")
@@ -53,7 +47,7 @@ Tekst:
 Retourneer ALLEEN een geldig JSON object, geen uitleg, geen markdown, geen backticks:
 {{
   "invoice_number": "factuurnummer als string of null",
-  "date": "datum in formaat DD-MM-YYYY of null",
+  "date": "datum in formaat DD.MM.YYYY of null",
   "amount": getal zonder valutasymbool of null,
   "description": "korte omschrijving of null",
   "category_suggestion": "één van: behandelingen, praktijkinrichting, vaste_lasten, abonnementen, materiaal, materieel, marketing, reiskosten, of null"
@@ -115,49 +109,16 @@ async def analyze_with_ollama(text: str) -> dict:
         return {"_ai_error": str(e)}
 
 
-async def analyze_with_configured_provider(db, text: str) -> dict:
-    """Gebruikt de in Instellingen gekozen AI-provider/model (database-config)."""
-    from sqlalchemy import select
-    from backend.models.models import AISettings
-
-    result = await db.execute(select(AISettings))
-    settings = result.scalar_one_or_none()
-    if not settings or not settings.provider:
-        return {}
-
-    provider = get_provider(settings.provider)
-    if not provider:
-        return {}
-
-    encrypted_key = (
-        settings.openai_api_key_encrypted if settings.provider == "openai"
-        else settings.anthropic_api_key_encrypted
-    )
-    api_key = decrypt(encrypted_key) if encrypted_key else ""
-    if not api_key:
-        return {}
-
-    model = settings.model or provider.default_model()
-    try:
-        content = await provider.complete(api_key, model, EXTRACTION_PROMPT.format(text=text[:3000]))
-        return json.loads(clean_json(content))
-    except Exception as e:
-        logger.error(f"AI-aanvraag mislukt voor provider {settings.provider}: {type(e).__name__}")
-        return {"_ai_error": f"AI-aanvraag mislukt ({type(e).__name__}). Controleer de AI-instellingen."}
-
-
-async def process_receipt(file_path: str, db=None) -> dict:
+async def process_receipt(file_path: str) -> dict:
     """Extract text and analyze with AI. Returns structured data."""
     text = extract_text(file_path)
     if not text:
         return {"error": "Kon geen tekst extraheren uit het bestand."}
 
     result = {}
-    if db is not None:
-        result = await analyze_with_configured_provider(db, text)
-    if not result and OPENAI_API_KEY:
+    if OPENAI_API_KEY:
         result = await analyze_with_openai(text)
-    elif not result and OLLAMA_BASE_URL:
+    elif OLLAMA_BASE_URL:
         result = await analyze_with_ollama(text)
 
     # Ensure amount is a float or null
