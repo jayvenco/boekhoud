@@ -24,3 +24,6 @@ services:
       - BACKUP_DIR=/app/backups
       - LOG_DIR=/app/logs
     restart: unless-stopped
+    labels:
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/jayvenco/boekhoud/main/logo_boekhoud.png"
+      net.unraid.docker.webui: "http://[IP]:[PORT:7777]"
