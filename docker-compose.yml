@@ -8,10 +8,10 @@ services:
     ports:
       - "7777:5000"
     volumes:
-      - boekhoud-data:/app/data
-      - boekhoud-uploads:/app/uploads
-      - boekhoud-backups:/app/backups
-      - boekhoud-logs:/app/logs
+      - /mnt/user/appdata/boekhoud/data:/app/data
+      - /mnt/user/appdata/boekhoud/uploads:/app/uploads
+      - /mnt/user/appdata/boekhoud/backups:/app/backups
+      - /mnt/user/appdata/boekhoud/logs:/app/logs
     environment:
       # Verander dit naar een willekeurige geheime string
       - SECRET_KEY=verander-dit-naar-een-geheime-sleutel
@@ -24,9 +24,3 @@ services:
       - BACKUP_DIR=/app/backups
       - LOG_DIR=/app/logs
     restart: unless-stopped
-
-volumes:
-  boekhoud-data:
-  boekhoud-uploads:
-  boekhoud-backups:
-  boekhoud-logs:
