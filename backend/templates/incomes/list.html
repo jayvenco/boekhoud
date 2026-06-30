@@ -88,12 +88,17 @@
           {% endif %}
         </td>
         <td>
+          {% if locked_years is defined and i.date.year in locked_years %}
+          <span class="badge badge-warning" title="Boekjaar {{ i.date.year }} is afgesloten">🔒 Alleen-lezen</span>
+          <a href="/inkomsten/{{ i.id }}/bewerken" class="btn btn-outline btn-xs">Bekijken</a>
+          {% else %}
           <div style="display:flex;gap:6px;">
             <a href="/inkomsten/{{ i.id }}/bewerken" class="btn btn-outline btn-xs">Bewerken</a>
             <form method="post" action="/inkomsten/{{ i.id }}/verwijderen" onsubmit="return confirm('Inkomst verwijderen?')">
               <button type="submit" class="btn btn-danger btn-xs">Verwijder</button>
             </form>
           </div>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

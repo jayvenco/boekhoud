@@ -13,6 +13,7 @@ from backend.models.database import init_db
 from backend.models.backup_database import init_backup_db, BackupSessionLocal
 from backend.models.models import BackupSettings
 from backend.routers import auth, incomes, expenses, dashboard, misc, backups, ai_settings, checklist
+from backend.routers import fiscal_years
 from backend.middleware import SettingsMiddleware
 from backend.services.backup import configure_backup_job
 
@@ -111,6 +112,7 @@ app.include_router(misc.router)
 app.include_router(backups.router)
 app.include_router(ai_settings.router)
 app.include_router(checklist.router)
+app.include_router(fiscal_years.router)
 
 
 @app.get("/health")

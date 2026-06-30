@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from backend.models.models import Base, User, IncomeCategory, ExpenseCategory, CompanySettings, AISettings, InvoiceNumberingSettings
+from backend.models.models import Base, User, IncomeCategory, ExpenseCategory, CompanySettings, AISettings, InvoiceNumberingSettings, FiscalYear, YearClosure
 import bcrypt
 import os
 
@@ -70,6 +70,9 @@ async def init_db():
                 await conn.exec_driver_sql(ddl)
             except Exception:
                 pass
+
+        # fiscal_years & fiscal_year_audit_logs worden automatisch aangemaakt via create_all.
+        # Geen extra ALTER TABLE nodig; dit zijn nieuwe tabellen.
 
         # Uitgebreide inkomsten-categorieën: omschrijving en contactgegevens.
         for ddl in [
@@ -149,5 +152,20 @@ async def init_db():
         result = await session.execute(select(InvoiceNumberingSettings))
         if not result.scalars().first():
             session.add(InvoiceNumberingSettings())
+
+        # Migreer bestaande year_closures naar fiscal_years
+        closures = await session.execute(select(YearClosure))
+        for closure in closures.scalars().all():
+            exists = await session.execute(select(FiscalYear).where(FiscalYear.year == closure.year))
+            if not exists.scalar_one_or_none():
+                from datetime import date as _date
+                session.add(FiscalYear(
+                    year=closure.year,
+                    status="afgesloten",
+                    start_date=_date(closure.year, 1, 1),
+                    end_date=_date(closure.year, 12, 31),
+                    closed_at=closure.closed_at,
+                    closed_by="admin",
+                ))
 
         await session.commit()

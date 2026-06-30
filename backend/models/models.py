@@ -265,6 +265,39 @@ class YearClosure(Base):
     open_items_at_closure = Column(Integer, default=0)
 
 
+class FiscalYear(Base):
+    __tablename__ = "fiscal_years"
+    id = Column(Integer, primary_key=True)
+    year = Column(Integer, unique=True, nullable=False, index=True)
+    status = Column(String(20), default="concept", nullable=False)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    opening_balance = Column(Float, default=0.0)
+    closing_balance = Column(Float, nullable=True)
+    total_income = Column(Float, nullable=True)
+    total_expenses = Column(Float, nullable=True)
+    total_transactions = Column(Integer, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+    closed_by = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    audit_logs = relationship("FiscalYearAuditLog", back_populates="fiscal_year",
+                              order_by="FiscalYearAuditLog.performed_at.desc()")
+
+
+class FiscalYearAuditLog(Base):
+    __tablename__ = "fiscal_year_audit_logs"
+    id = Column(Integer, primary_key=True)
+    fiscal_year_id = Column(Integer, ForeignKey("fiscal_years.id"), nullable=False)
+    year = Column(Integer, nullable=False)
+    action = Column(String(50), nullable=False)
+    performed_by = Column(String(100), nullable=True)
+    performed_at = Column(DateTime, server_default=func.now())
+    reason = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    fiscal_year = relationship("FiscalYear", back_populates="audit_logs")
+
+
 class InvoiceNumberingSettings(Base):
     __tablename__ = "invoice_numbering_settings"
     id = Column(Integer, primary_key=True)

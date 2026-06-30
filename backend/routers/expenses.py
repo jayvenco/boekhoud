@@ -11,6 +11,7 @@ from backend.routers.auth import require_auth
 from backend.services.files import save_receipts, delete_file, move_tmp_to_category
 from backend.services.i18n import t
 from backend.services.invoice_numbering import get_numbering_settings
+from backend.services.fiscal_year import is_year_locked, get_locked_years
 from datetime import date, datetime
 import calendar
 from typing import Optional, List
@@ -123,8 +124,10 @@ async def list_expenses(request: Request, db: AsyncSession = Depends(get_db), q:
     result = await db.execute(query)
     expenses = result.scalars().all()
     cats = await db.execute(select(ExpenseCategory))
+    locked_years = await get_locked_years(db)
     return templates.TemplateResponse(request, "expenses/list.html", {
-        "expenses": expenses, "categories": cats.scalars().all(), "q": q, "today": date.today()
+        "expenses": expenses, "categories": cats.scalars().all(), "q": q,
+        "today": date.today(), "locked_years": locked_years,
     })
 
 
@@ -164,6 +167,14 @@ async def create_expense(
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
         return user
+
+    expense_year = parse_date(date_str).year
+    if await is_year_locked(db, expense_year):
+        cats = await db.execute(select(ExpenseCategory))
+        return templates.TemplateResponse(request, "expenses/form.html", {
+            "categories": cats.scalars().all(), "expense": None,
+            "error": f"Boekjaar {expense_year} is afgesloten. Uitgaven kunnen niet worden toegevoegd aan een afgesloten boekjaar."
+        })
 
     cat = await db.get(ExpenseCategory, category_id)
 
@@ -273,8 +284,10 @@ async def edit_expense_form(id: int, request: Request, db: AsyncSession = Depend
     if not expense:
         raise HTTPException(404)
     cats = await db.execute(select(ExpenseCategory))
+    year_locked = await is_year_locked(db, expense.date.year)
     return templates.TemplateResponse(request, "expenses/form.html", {
-        "categories": cats.scalars().all(), "expense": expense
+        "categories": cats.scalars().all(), "expense": expense,
+        "year_locked": year_locked,
     })
 
 
@@ -311,6 +324,14 @@ async def update_expense(
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404)
+
+    if await is_year_locked(db, expense.date.year):
+        cats = await db.execute(select(ExpenseCategory))
+        return templates.TemplateResponse(request, "expenses/form.html", {
+            "categories": cats.scalars().all(), "expense": expense,
+            "year_locked": True,
+            "error": f"Boekjaar {expense.date.year} is afgesloten. Wijzigingen zijn niet toegestaan."
+        })
 
     # Check duplicate invoice (exclude self)
     dup = await db.execute(select(Expense).where(Expense.invoice_number == invoice_number, Expense.id != id))
@@ -482,6 +503,8 @@ async def delete_expense(id: int, request: Request, db: AsyncSession = Depends(g
         .where(Expense.id == id)
     )
     expense = result.scalar_one_or_none()
+    if expense and await is_year_locked(db, expense.date.year):
+        return RedirectResponse("/uitgaven?error=vergrendeld", status_code=302)
     if expense:
         for r in expense.receipts:
             delete_file(r.file_path)

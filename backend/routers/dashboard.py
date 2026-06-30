@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from backend.models.database import get_db
-from backend.models.models import Income, Expense, ExpenseCategory, IncomeCategory, Depreciation, ChecklistItem, YearClosure
+from backend.models.models import Income, Expense, ExpenseCategory, IncomeCategory, Depreciation, ChecklistItem, YearClosure, FiscalYear
 from backend.routers.auth import require_auth
 from backend.routers.checklist import get_checklist_summary
 from backend.services.i18n import t
@@ -286,6 +286,9 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
     closure_result = await db.execute(select(YearClosure).where(YearClosure.year == year))
     closure = closure_result.scalar_one_or_none()
 
+    fy_result = await db.execute(select(FiscalYear).where(FiscalYear.year == year))
+    fiscal_year = fy_result.scalar_one_or_none()
+
     return templates.TemplateResponse(request, "yearly.html", {
         "year": year,
         "years": list(range(2022, datetime.now().year + 2)),
@@ -304,6 +307,7 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
         "chart_cumulative": [r["cumulative"] for r in rows],
         "open_checklist_items": open_checklist_items,
         "closure": closure,
+        "fiscal_year": fiscal_year,
         "warn_open_items": request.query_params.get("warn") == "1",
     })
 
@@ -416,3 +420,143 @@ async def export_yearly(request: Request, db: AsyncSession = Depends(get_db)):
     return StreamingResponse(io.BytesIO(output.getvalue().encode("utf-8-sig")),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=jaaroverzicht_{year}.csv"})
+
+
+@router.get("/export/jaaroverzicht-xlsx")
+async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db)):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, numbers
+    from openpyxl.utils import get_column_letter
+
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    year = int(request.query_params.get("jaar", datetime.now().year))
+
+    incomes_q = await db.execute(
+        select(Income).options(selectinload(Income.category))
+        .where(year_filter(Income, year)).order_by(Income.date)
+    )
+    incomes = incomes_q.scalars().all()
+
+    expenses_q = await db.execute(
+        select(Expense).options(selectinload(Expense.category))
+        .where(year_filter(Expense, year)).order_by(Expense.date)
+    )
+    expenses = expenses_q.scalars().all()
+
+    total_income = sum(i.amount for i in incomes)
+    total_expenses = sum(e.amount for e in expenses)
+
+    month_names = ["Januari","Februari","Maart","April","Mei","Juni",
+                   "Juli","Augustus","September","Oktober","November","December"]
+
+    wb = openpyxl.Workbook()
+    hdr_fill = PatternFill("solid", fgColor="4A7C59")
+    hdr_font = Font(color="FFFFFF", bold=True)
+
+    def style_header(ws, headers):
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(1, col, h)
+            cell.fill = hdr_fill
+            cell.font = hdr_font
+            cell.alignment = Alignment(horizontal="center")
+        ws.freeze_panes = "A2"
+
+    def auto_width(ws):
+        for col in ws.columns:
+            max_len = max((len(str(c.value or "")) for c in col), default=10)
+            ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 50)
+
+    # Sheet 1: Inkomsten
+    ws1 = wb.active
+    ws1.title = "Inkomsten"
+    style_header(ws1, ["Factuurnummer", "Datum", "Categorie", "Bedrag (€)", "Status", "Omschrijving"])
+    for i, inc in enumerate(incomes, 2):
+        ws1.cell(i, 1, inc.invoice_number)
+        ws1.cell(i, 2, inc.date.strftime("%d-%m-%Y"))
+        ws1.cell(i, 3, inc.category.name if inc.category else "")
+        ws1.cell(i, 4, inc.amount).number_format = '#,##0.00'
+        ws1.cell(i, 5, inc.status)
+        ws1.cell(i, 6, inc.description or "")
+    ws1.cell(len(incomes) + 2, 3, "Totaal")
+    ws1.cell(len(incomes) + 2, 3).font = Font(bold=True)
+    ws1.cell(len(incomes) + 2, 4, total_income).number_format = '#,##0.00'
+    ws1.cell(len(incomes) + 2, 4).font = Font(bold=True)
+    auto_width(ws1)
+
+    # Sheet 2: Uitgaven
+    ws2 = wb.create_sheet("Uitgaven")
+    style_header(ws2, ["Factuurnummer", "Datum", "Categorie", "Bedrag (€)", "Omschrijving"])
+    for i, exp in enumerate(expenses, 2):
+        ws2.cell(i, 1, exp.invoice_number)
+        ws2.cell(i, 2, exp.date.strftime("%d-%m-%Y"))
+        ws2.cell(i, 3, exp.category.name if exp.category else "")
+        ws2.cell(i, 4, exp.amount).number_format = '#,##0.00'
+        ws2.cell(i, 5, exp.description or "")
+    ws2.cell(len(expenses) + 2, 3, "Totaal")
+    ws2.cell(len(expenses) + 2, 3).font = Font(bold=True)
+    ws2.cell(len(expenses) + 2, 4, total_expenses).number_format = '#,##0.00'
+    ws2.cell(len(expenses) + 2, 4).font = Font(bold=True)
+    auto_width(ws2)
+
+    # Sheet 3: Resultaatoverzicht per maand
+    ws3 = wb.create_sheet("Resultaatoverzicht")
+    style_header(ws3, ["Maand", "Inkomsten (€)", "Uitgaven (€)", "Winst/Verlies (€)", "Cumulatief (€)"])
+    inc_by_m = {}
+    for i in incomes:
+        inc_by_m[i.date.month] = inc_by_m.get(i.date.month, 0) + i.amount
+    exp_by_m = {}
+    for e in expenses:
+        exp_by_m[e.date.month] = exp_by_m.get(e.date.month, 0) + e.amount
+    cumulative = 0
+    for m in range(1, 13):
+        inc_m = inc_by_m.get(m, 0)
+        exp_m = exp_by_m.get(m, 0)
+        profit_m = inc_m - exp_m
+        cumulative += profit_m
+        row = m + 1
+        ws3.cell(row, 1, month_names[m - 1])
+        ws3.cell(row, 2, inc_m).number_format = '#,##0.00'
+        ws3.cell(row, 3, exp_m).number_format = '#,##0.00'
+        ws3.cell(row, 4, profit_m).number_format = '#,##0.00'
+        ws3.cell(row, 5, cumulative).number_format = '#,##0.00'
+    total_row = 14
+    for col, val in [(1, "Totaal"), (2, total_income), (3, total_expenses),
+                     (4, total_income - total_expenses)]:
+        c = ws3.cell(total_row, col, val)
+        c.font = Font(bold=True)
+        if col > 1:
+            c.number_format = '#,##0.00'
+    auto_width(ws3)
+
+    # Sheet 4: Per categorie
+    ws4 = wb.create_sheet("Per categorie")
+    style_header(ws4, ["Categorie", "Type", "Bedrag (€)", "Aantal"])
+    inc_by_cat = {}
+    for i in incomes:
+        key = i.category.name if i.category else "Onbekend"
+        inc_by_cat[key] = (inc_by_cat.get(key, (0, 0))[0] + i.amount,
+                           inc_by_cat.get(key, (0, 0))[1] + 1)
+    exp_by_cat = {}
+    for e in expenses:
+        key = e.category.name if e.category else "Onbekend"
+        exp_by_cat[key] = (exp_by_cat.get(key, (0, 0))[0] + e.amount,
+                           exp_by_cat.get(key, (0, 0))[1] + 1)
+    row = 2
+    for cat, (total, count) in sorted(inc_by_cat.items()):
+        ws4.cell(row, 1, cat); ws4.cell(row, 2, "Inkomsten")
+        ws4.cell(row, 3, total).number_format = '#,##0.00'
+        ws4.cell(row, 4, count); row += 1
+    for cat, (total, count) in sorted(exp_by_cat.items()):
+        ws4.cell(row, 1, cat); ws4.cell(row, 2, "Uitgaven")
+        ws4.cell(row, 3, total).number_format = '#,##0.00'
+        ws4.cell(row, 4, count); row += 1
+    auto_width(ws4)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=jaaroverzicht_{year}.xlsx"})

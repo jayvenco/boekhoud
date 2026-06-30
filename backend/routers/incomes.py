@@ -10,6 +10,7 @@ from backend.models.models import Income, IncomeCategory, IncomeReceipt
 from backend.routers.auth import require_auth
 from backend.services.files import save_receipts, delete_file, move_tmp_to_category
 from backend.services.invoice_numbering import get_numbering_settings
+from backend.services.fiscal_year import is_year_locked, get_locked_years
 from backend.services.i18n import t
 from datetime import date, datetime
 from typing import Optional, List
@@ -69,9 +70,11 @@ async def list_incomes(request: Request, db: AsyncSession = Depends(get_db), q: 
     result = await db.execute(query)
     incomes = result.scalars().all()
     cats = await db.execute(select(IncomeCategory))
+    locked_years = await get_locked_years(db)
     return templates.TemplateResponse(request, "incomes/list.html", {
         "incomes": incomes, "categories": cats.scalars().all(), "q": q,
-        "received_via_labels": RECEIVED_VIA_OPTIONS
+        "received_via_labels": RECEIVED_VIA_OPTIONS,
+        "locked_years": locked_years,
     })
 
 
@@ -107,6 +110,16 @@ async def create_income(
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
         return user
+
+    # Controleer of het boekjaar vergrendeld is
+    income_year = parse_date(date_str).year
+    if await is_year_locked(db, income_year):
+        cats = await db.execute(select(IncomeCategory))
+        return templates.TemplateResponse(request, "incomes/form.html", {
+            "categories": cats.scalars().all(), "income": None,
+            "received_via_options": RECEIVED_VIA_OPTIONS,
+            "error": f"Boekjaar {income_year} is afgesloten. Inkomsten kunnen niet worden toegevoegd aan een afgesloten boekjaar."
+        })
 
     received_via, received_via_other, via_error = validate_received_via(received_via, received_via_other)
     if via_error:
@@ -174,9 +187,11 @@ async def edit_income_form(id: int, request: Request, db: AsyncSession = Depends
     if not income:
         raise HTTPException(404)
     cats = await db.execute(select(IncomeCategory))
+    year_locked = await is_year_locked(db, income.date.year)
     return templates.TemplateResponse(request, "incomes/form.html", {
         "categories": cats.scalars().all(), "income": income,
-        "received_via_options": RECEIVED_VIA_OPTIONS
+        "received_via_options": RECEIVED_VIA_OPTIONS,
+        "year_locked": year_locked,
     })
 
 
@@ -204,6 +219,15 @@ async def update_income(
     income = result.scalar_one_or_none()
     if not income:
         raise HTTPException(404)
+
+    if await is_year_locked(db, income.date.year):
+        cats = await db.execute(select(IncomeCategory))
+        return templates.TemplateResponse(request, "incomes/form.html", {
+            "categories": cats.scalars().all(), "income": income,
+            "received_via_options": RECEIVED_VIA_OPTIONS,
+            "year_locked": True,
+            "error": f"Boekjaar {income.date.year} is afgesloten. Wijzigingen zijn niet toegestaan."
+        })
 
     received_via, received_via_other, via_error = validate_received_via(received_via, received_via_other)
     if via_error:
@@ -286,6 +310,8 @@ async def delete_income(id: int, request: Request, db: AsyncSession = Depends(ge
         select(Income).options(selectinload(Income.receipts)).where(Income.id == id)
     )
     income = result.scalar_one_or_none()
+    if income and await is_year_locked(db, income.date.year):
+        return RedirectResponse("/inkomsten?error=vergrendeld", status_code=302)
     if income:
         for r in income.receipts:
             delete_file(r.file_path)

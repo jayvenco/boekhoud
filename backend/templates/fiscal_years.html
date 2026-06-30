@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Boekjaren{% endblock %}
+{% block page_title %}Boekjaren{% endblock %}
+
+{% block topbar_actions %}
+<button type="button" onclick="toggleNewForm()" class="btn btn-primary btn-sm">+ Nieuw boekjaar</button>
+{% endblock %}
+
+{% block content %}
+
+{% if success %}
+{% set msgs = {
+  'aangemaakt': '✅ Boekjaar aangemaakt.',
+  'geactiveerd': '✅ Boekjaar geactiveerd als actief boekjaar.',
+  'afgesloten': '✅ Boekjaar ' + request.query_params.get('jaar','') + ' is definitief afgesloten.',
+  'heropend': '✅ Boekjaar ' + request.query_params.get('jaar','') + ' is heropend.',
+} %}
+<div class="alert alert-success">{{ msgs[success] if success in msgs else '✅ Opgeslagen.' }}</div>
+{% endif %}
+
+{% if error %}
+{% set errmsgs = {
+  'bestaat': '⚠️ Er bestaat al een boekjaar voor dit jaar.',
+  'al_afgesloten': '⚠️ Dit boekjaar is al afgesloten.',
+  'ongeldig': '⚠️ Ongeldige actie voor dit boekjaar.',
+} %}
+<div class="alert alert-error">{{ errmsgs[error] if error in errmsgs else '⚠️ Er is iets misgegaan.' }}</div>
+{% endif %}
+
+<!-- Nieuw boekjaar formulier -->
+<div id="new-fy-form" style="display:none;margin-bottom:24px;" class="card">
+  <div class="section-title" style="margin-bottom:16px;">Nieuw boekjaar aanmaken</div>
+  <form method="post" action="/boekjaren/nieuw">
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:14px;align-items:end;">
+      <div class="form-group">
+        <label>Boekjaar *</label>
+        <input type="number" name="year" min="2000" max="2099" value="{{ current_year }}" required>
+      </div>
+      <div class="form-group">
+        <label>Beginsaldo (€)</label>
+        <input type="number" name="opening_balance" step="0.01" value="0.00">
+      </div>
+      <div class="form-group">
+        <label>Opmerkingen</label>
+        <input type="text" name="notes" placeholder="Optioneel">
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;">
+      <button type="submit" class="btn btn-primary btn-sm">Aanmaken</button>
+      <button type="button" onclick="toggleNewForm()" class="btn btn-outline btn-sm">Annuleren</button>
+    </div>
+  </form>
+</div>
+
+<!-- Boekjaren overzicht -->
+{% if fiscal_years %}
+<div class="table-wrap" style="margin-bottom:28px;">
+  <table>
+    <thead>
+      <tr>
+        <th>Boekjaar</th>
+        <th>Status</th>
+        <th>Startdatum</th>
+        <th>Einddatum</th>
+        <th>Beginsaldo</th>
+        <th>Eindsaldo</th>
+        <th>Afgesloten op</th>
+        <th>Afgesloten door</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for fy in fiscal_years %}
+    <tr style="{% if fy.status == 'actief' %}background:var(--success-light);{% elif fy.status == 'afgesloten' %}opacity:0.8;{% endif %}">
+      <td>
+        <strong>{{ fy.year }}</strong>
+        {% if fy.status == 'actief' %}<span style="font-size:11px;color:var(--success);margin-left:6px;">● Actief</span>{% endif %}
+      </td>
+      <td>
+        <span class="badge {{ status_badge[fy.status] }}">{{ status_labels[fy.status] }}</span>
+      </td>
+      <td>{{ fy.start_date.strftime('%d-%m-%Y') if fy.start_date else '—' }}</td>
+      <td>{{ fy.end_date.strftime('%d-%m-%Y') if fy.end_date else '—' }}</td>
+      <td class="amount">€ {{ "%.2f"|format(fy.opening_balance or 0) }}</td>
+      <td class="amount {% if fy.closing_balance is not none %}{% if fy.closing_balance >= 0 %}amount-positive{% else %}amount-negative{% endif %}{% endif %}">
+        {% if fy.closing_balance is not none %}€ {{ "%.2f"|format(fy.closing_balance) }}{% else %}—{% endif %}
+      </td>
+      <td>{{ fy.closed_at.strftime('%d-%m-%Y %H:%M') if fy.closed_at else '—' }}</td>
+      <td>{{ fy.closed_by or '—' }}</td>
+      <td style="white-space:nowrap;">
+        {% if fy.status == 'concept' %}
+        <form method="post" action="/boekjaren/{{ fy.year }}/activeren" style="display:inline;">
+          <button type="submit" class="btn btn-outline btn-xs">Activeren</button>
+        </form>
+        <a href="/boekjaren/{{ fy.year }}/afsluiten" class="btn btn-xs btn-sm" style="background:var(--warning-bg);color:var(--warning);border:1px solid var(--warning);">Afsluiten</a>
+        {% elif fy.status == 'actief' %}
+        <a href="/boekjaren/{{ fy.year }}/afsluiten" class="btn btn-primary btn-xs">Afsluiten</a>
+        {% elif fy.status == 'afgesloten' %}
+        <button type="button" onclick="toggleReopenForm({{ fy.year }})" class="btn btn-outline btn-xs">Heropenen</button>
+        {% endif %}
+        <a href="/jaaroverzicht?jaar={{ fy.year }}" class="btn btn-outline btn-xs">Overzicht</a>
+      </td>
+    </tr>
+    <!-- Heropenen formulier (verborgen) -->
+    {% if fy.status == 'afgesloten' %}
+    <tr id="reopen-{{ fy.year }}" style="display:none;background:var(--warning-bg);">
+      <td colspan="9" style="padding:14px;">
+        <form method="post" action="/boekjaren/{{ fy.year }}/heropenen">
+          <div style="display:flex;gap:12px;align-items:end;">
+            <div class="form-group" style="flex:1;">
+              <label>Reden van heropening *</label>
+              <input type="text" name="reason" required placeholder="Verplicht — beschrijf de reden van heropening">
+            </div>
+            <button type="submit" class="btn btn-sm" style="background:var(--warning);color:#fff;border:none;"
+              onclick="return confirm('Boekjaar {{ fy.year }} heropenen? Alle transacties worden weer bewerkbaar.')">
+              Bevestigen
+            </button>
+            <button type="button" onclick="toggleReopenForm({{ fy.year }})" class="btn btn-outline btn-sm">Annuleren</button>
+          </div>
+        </form>
+      </td>
+    </tr>
+    {% endif %}
+    <!-- Audittrail (verborgen) -->
+    {% if fy.audit_logs %}
+    <tr id="audit-{{ fy.year }}" style="display:none;background:#f9f9f7;">
+      <td colspan="9" style="padding:14px;">
+        <div style="font-weight:600;font-size:12px;color:var(--warm-gray);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Audittrail</div>
+        <table style="font-size:12px;">
+          <thead><tr><th>Datum/tijd</th><th>Actie</th><th>Gebruiker</th><th>Reden</th><th>Opmerkingen</th></tr></thead>
+          <tbody>
+          {% for log in fy.audit_logs %}
+          <tr>
+            <td>{{ log.performed_at.strftime('%d-%m-%Y %H:%M') }}</td>
+            <td><span class="badge badge-neutral">{{ log.action }}</span></td>
+            <td>{{ log.performed_by or '—' }}</td>
+            <td>{{ log.reason or '—' }}</td>
+            <td style="color:var(--mid)">{{ log.notes or '—' }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </td>
+    </tr>
+    {% endif %}
+    <tr style="font-size:11px;">
+      <td colspan="9" style="padding:2px 14px;border-bottom:2px solid var(--border);">
+        {% if fy.audit_logs %}
+        <button type="button" onclick="toggleAudit({{ fy.year }})" style="background:none;border:none;cursor:pointer;color:var(--warm-gray);font-size:11px;padding:0;">
+          ▾ Audittrail ({{ fy.audit_logs|length }})
+        </button>
+        {% endif %}
+        {% if fy.notes %}<span style="color:var(--mid);margin-left:12px;">📝 {{ fy.notes }}</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-state-icon">📅</div>
+    <p>Nog geen boekjaren aangemaakt.<br>Klik op "+ Nieuw boekjaar" om te beginnen.</p>
+  </div>
+</div>
+{% endif %}
+
+<!-- Toelichting -->
+<div class="card" style="font-size:13px;color:var(--mid);line-height:1.8;">
+  <div class="section-title" style="margin-bottom:10px;">Werkwijze boekjaren</div>
+  <ul style="margin-left:18px;padding:0;">
+    <li><strong>Concept</strong> — boekjaar is aangemaakt maar nog niet actief. Transacties kunnen al worden ingevoerd.</li>
+    <li><strong>Actief</strong> — huidig boekjaar. Er kan slechts één actief boekjaar tegelijk zijn.</li>
+    <li><strong>Afgesloten</strong> — alle transacties in dit jaar zijn vergrendeld (alleen-lezen). Alleen beheerders kunnen heropenen.</li>
+    <li>Bij afsluiting wordt het eindsaldo automatisch overgenomen als beginsaldo van het volgende boekjaar.</li>
+  </ul>
+</div>
+
+<script>
+function toggleNewForm() {
+  const el = document.getElementById('new-fy-form');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function toggleReopenForm(year) {
+  const el = document.getElementById('reopen-' + year);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+}
+function toggleAudit(year) {
+  const el = document.getElementById('audit-' + year);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+}
+{% if success %}
+document.addEventListener('DOMContentLoaded', function() {
+  window.scrollTo(0, 0);
+});
+{% endif %}
+</script>
+{% endblock %}

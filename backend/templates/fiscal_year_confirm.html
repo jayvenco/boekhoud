@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Boekjaar {{ year }} afsluiten{% endblock %}
+{% block page_title %}Boekjaar {{ year }} afsluiten{% endblock %}
+
+{% block topbar_actions %}
+<a href="/boekjaren" class="btn btn-outline">← Terug</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="alert alert-error" style="font-size:14px;margin-bottom:24px;">
+  ⚠️ <strong>Let op:</strong> Na afsluiting zijn alle transacties in boekjaar {{ year }} vergrendeld en alleen-lezen.
+  Alleen een beheerder kan een afgesloten boekjaar heropenen.
+</div>
+
+<!-- Samenvatting -->
+<div class="stat-grid" style="margin-bottom:28px;">
+  <div class="stat-card income">
+    <div class="stat-label">Totale inkomsten</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(stats.total_income) }}</div>
+    <div class="stat-sub">{{ stats.income_count }} transacties</div>
+  </div>
+  <div class="stat-card expense">
+    <div class="stat-label">Totale uitgaven</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(stats.total_expenses) }}</div>
+    <div class="stat-sub">{{ stats.expense_count }} transacties</div>
+  </div>
+  <div class="stat-card {% if stats.balance >= 0 %}income{% else %}expense{% endif %}">
+    <div class="stat-label">Eindsaldo</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(stats.balance) }}</div>
+    <div class="stat-sub">Winst / Verlies</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Totaal transacties</div>
+    <div class="stat-value">{{ stats.transaction_count }}</div>
+    <div class="stat-sub">Inkomsten + uitgaven</div>
+  </div>
+</div>
+
+<div class="card" style="max-width:600px;">
+  <div class="section-title" style="margin-bottom:6px;">Bevestiging afsluiting boekjaar {{ year }}</div>
+  <p style="font-size:13px;color:var(--mid);margin-bottom:20px;">
+    U staat op het punt boekjaar <strong>{{ year }}</strong> af te sluiten.
+    Na afsluiting zijn gegevens alleen beschikbaar in leesmodus.
+    Het eindsaldo van <strong>€ {{ "%.2f"|format(stats.balance) }}</strong> wordt automatisch
+    overgenomen als beginsaldo van boekjaar {{ year + 1 }}.
+  </p>
+  <form method="post" action="/boekjaren/{{ year }}/afsluiten">
+    <div class="form-group" style="margin-bottom:18px;">
+      <label>Opmerkingen bij afsluiting (optioneel)</label>
+      <textarea name="reason" placeholder="Bijv. 'Definitieve jaarafsluiting na controle door accountant'" style="min-height:70px;"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button type="submit" class="btn btn-primary"
+        onclick="return confirm('Boekjaar {{ year }} definitief afsluiten? Dit vergrendelt alle transacties.')">
+        ✓ Boekjaar {{ year }} afsluiten
+      </button>
+      <a href="/boekjaren" class="btn btn-outline">Annuleren</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

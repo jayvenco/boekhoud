@@ -19,7 +19,12 @@
 </div>
 {% endif %}
 
-{% if error %}
+{% if year_locked %}
+<div class="alert alert-error" style="display:flex;align-items:center;gap:10px;">
+  🔒 <strong>Alleen-lezen</strong> — Boekjaar {{ expense.date.year if expense else '' }} is afgesloten. Gegevens kunnen niet worden gewijzigd.
+  <a href="/boekjaren" style="margin-left:auto;color:inherit;font-weight:600;">Boekjaren beheren →</a>
+</div>
+{% elif error %}
 <div class="alert alert-error">{{ error }}</div>
 {% endif %}
 
@@ -183,10 +188,12 @@
     </div>
 
     <div style="margin-top:22px;display:flex;gap:12px;">
+      {% if not year_locked %}
       <button type="submit" class="btn btn-primary">
         {% if expense %}Wijzigingen opslaan{% else %}Uitgave opslaan{% endif %}
       </button>
-      <a href="/uitgaven" class="btn btn-outline">Annuleren</a>
+      {% endif %}
+      <a href="/uitgaven" class="btn btn-outline">{% if year_locked %}Terug{% else %}Annuleren{% endif %}</a>
     </div>
   </form>
 </div>
