@@ -87,6 +87,11 @@ class IncomeCategory(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
     slug = Column(String(100), unique=True, nullable=False)
+    description = Column(String(500), nullable=True)
+    contact_firstname = Column(String(100), nullable=True)
+    contact_lastname = Column(String(100), nullable=True)
+    phone = Column(String(50), nullable=True)
+    email = Column(String(200), nullable=True)
     incomes = relationship("Income", back_populates="category")
 
 

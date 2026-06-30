@@ -71,6 +71,19 @@ async def init_db():
             except Exception:
                 pass
 
+        # Uitgebreide inkomsten-categorieën: omschrijving en contactgegevens.
+        for ddl in [
+            "ALTER TABLE income_categories ADD COLUMN description VARCHAR(500)",
+            "ALTER TABLE income_categories ADD COLUMN contact_firstname VARCHAR(100)",
+            "ALTER TABLE income_categories ADD COLUMN contact_lastname VARCHAR(100)",
+            "ALTER TABLE income_categories ADD COLUMN phone VARCHAR(50)",
+            "ALTER TABLE income_categories ADD COLUMN email VARCHAR(200)",
+        ]:
+            try:
+                await conn.exec_driver_sql(ddl)
+            except Exception:
+                pass
+
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.database import get_db
 from backend.models.backup_database import get_backup_db
-from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense
+from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense, IncomeCategory, InvoiceNumberingSettings
 from backend.routers.auth import require_auth
 from backend.services.ocr import process_receipt
 from backend.services.files import save_receipts, UPLOAD_ROOT
@@ -13,11 +13,12 @@ from backend.services.auth import hash_password
 from backend.services.ai_providers import PROVIDERS
 from backend.services.crypto import decrypt, mask
 from backend.services.invoice_numbering import get_next_invoice_number, get_numbering_settings
-from backend.models.models import InvoiceNumberingSettings
 from backend.services.i18n import t
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import re
+import unicodedata
 
 router = APIRouter()
 templates = Jinja2Templates(directory="backend/templates")
@@ -47,7 +48,6 @@ async def next_invoice_number(
 def _validate_invoice_template(template: str) -> Optional[str]:
     """Alleen de plaatshouders {year} en {number} zijn toegestaan (geen vrije format-strings).
     Geeft het opgeschoonde template terug, of None als het ongeldig is."""
-    import re
     template = template.strip() or "{year}-{number}"
     placeholders = re.findall(r"\{[^{}]*\}", template)
     if "{year}" not in template or any(p not in ("{year}", "{number}") for p in placeholders):
@@ -193,6 +193,150 @@ async def update_planned_status(
     return RedirectResponse("/gepland", status_code=302)
 
 
+# ── Inkomsten-categorieën ─────────────────────────────
+
+def _slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", "_", text)
+    return text or "categorie"
+
+
+async def _unique_slug(db: AsyncSession, base_slug: str, exclude_id: int = None) -> str:
+    slug = base_slug
+    i = 2
+    while True:
+        q = select(IncomeCategory).where(IncomeCategory.slug == slug)
+        if exclude_id:
+            q = q.where(IncomeCategory.id != exclude_id)
+        res = await db.execute(q)
+        if not res.scalar_one_or_none():
+            return slug
+        slug = f"{base_slug}_{i}"
+        i += 1
+
+
+def _valid_email(email: str) -> bool:
+    if not email.strip():
+        return True
+    return bool(re.match(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", email.strip()))
+
+
+def _valid_phone(phone: str) -> bool:
+    if not phone.strip():
+        return True
+    return bool(re.match(r"^[\+\d\s\(\)\-\.]{7,20}$", phone.strip()))
+
+
+@router.post("/instellingen/inkomsten-categorieen/nieuw")
+async def create_income_category(
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    contact_firstname: str = Form(""),
+    contact_lastname: str = Form(""),
+    phone: str = Form(""),
+    email: str = Form(""),
+    db: AsyncSession = Depends(get_db)
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    name = name.strip()
+    if not name:
+        return RedirectResponse("/instellingen?cat_error=naam_verplicht", status_code=302)
+    if not _valid_email(email):
+        return RedirectResponse("/instellingen?cat_error=ongeldig_email", status_code=302)
+    if not _valid_phone(phone):
+        return RedirectResponse("/instellingen?cat_error=ongeldig_telefoon", status_code=302)
+
+    existing = await db.execute(select(IncomeCategory).where(IncomeCategory.name == name))
+    if existing.scalar_one_or_none():
+        return RedirectResponse("/instellingen?cat_error=naam_bestaat", status_code=302)
+
+    slug = await _unique_slug(db, _slugify(name))
+    db.add(IncomeCategory(
+        name=name,
+        slug=slug,
+        description=description.strip() or None,
+        contact_firstname=contact_firstname.strip() or None,
+        contact_lastname=contact_lastname.strip() or None,
+        phone=phone.strip() or None,
+        email=email.strip() or None,
+    ))
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
+@router.post("/instellingen/inkomsten-categorieen/{id}/bewerken")
+async def update_income_category(
+    id: int,
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    contact_firstname: str = Form(""),
+    contact_lastname: str = Form(""),
+    phone: str = Form(""),
+    email: str = Form(""),
+    db: AsyncSession = Depends(get_db)
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    cat = await db.get(IncomeCategory, id)
+    if not cat:
+        raise HTTPException(404)
+
+    name = name.strip()
+    if not name:
+        return RedirectResponse(f"/instellingen?cat_error=naam_verplicht&cat_id={id}", status_code=302)
+    if not _valid_email(email):
+        return RedirectResponse(f"/instellingen?cat_error=ongeldig_email&cat_id={id}", status_code=302)
+    if not _valid_phone(phone):
+        return RedirectResponse(f"/instellingen?cat_error=ongeldig_telefoon&cat_id={id}", status_code=302)
+
+    existing = await db.execute(select(IncomeCategory).where(IncomeCategory.name == name, IncomeCategory.id != id))
+    if existing.scalar_one_or_none():
+        return RedirectResponse(f"/instellingen?cat_error=naam_bestaat&cat_id={id}", status_code=302)
+
+    if cat.name != name:
+        cat.slug = await _unique_slug(db, _slugify(name), exclude_id=id)
+    cat.name = name
+    cat.description = description.strip() or None
+    cat.contact_firstname = contact_firstname.strip() or None
+    cat.contact_lastname = contact_lastname.strip() or None
+    cat.phone = phone.strip() or None
+    cat.email = email.strip() or None
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
+@router.post("/instellingen/inkomsten-categorieen/{id}/verwijderen")
+async def delete_income_category(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    cat = await db.get(IncomeCategory, id)
+    if not cat:
+        raise HTTPException(404)
+
+    linked = await db.execute(select(Income).where(Income.category_id == id))
+    if linked.scalar_one_or_none():
+        return RedirectResponse("/instellingen?cat_error=heeft_inkomsten", status_code=302)
+
+    await db.delete(cat)
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
 # ── Settings ───────────────────────────────────────────
 @router.get("/instellingen", response_class=HTMLResponse)
 async def settings_page(
@@ -220,6 +364,9 @@ async def settings_page(
 
     invoice_numbering_settings = await get_numbering_settings(db)
 
+    result = await db.execute(select(IncomeCategory).order_by(IncomeCategory.name))
+    income_categories = result.scalars().all()
+
     return templates.TemplateResponse(request, "settings.html", {"user": user, "settings": settings,
         "backup_settings": backup_settings,
         "ai_settings": ai_settings,
@@ -227,8 +374,11 @@ async def settings_page(
         "ai_provider_models": ai_provider_models,
         "ai_key_masks": ai_key_masks,
         "invoice_numbering_settings": invoice_numbering_settings,
+        "income_categories": income_categories,
         "success": request.query_params.get("success"),
-        "error": request.query_params.get("error")})
+        "error": request.query_params.get("error"),
+        "cat_error": request.query_params.get("cat_error"),
+        "cat_id": request.query_params.get("cat_id")})
 
 
 @router.post("/instellingen")

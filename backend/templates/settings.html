@@ -261,6 +261,159 @@
   </div>
 </div>
 
+<div style="margin-top:20px;" class="card" id="inkomsten-categorieen">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div class="section-title" style="margin-bottom:0;">Inkomsten-categorieën</div>
+    <button type="button" onclick="toggleCatForm('new')" class="btn btn-primary btn-sm">+ Nieuwe categorie</button>
+  </div>
+
+  {% if cat_error %}
+  {% set cat_error_msgs = {
+    'naam_verplicht': 'Categorienaam is verplicht.',
+    'naam_bestaat': 'Er bestaat al een categorie met deze naam.',
+    'ongeldig_email': 'Voer een geldig e-mailadres in.',
+    'ongeldig_telefoon': 'Voer een geldig telefoonnummer in (7–20 tekens, bijv. +31 6 12345678).',
+    'heeft_inkomsten': 'Deze categorie kan niet worden verwijderd omdat er nog inkomsten aan gekoppeld zijn.'
+  } %}
+  <div class="alert alert-error" style="margin-bottom:16px;">
+    ⚠️ {{ cat_error_msgs[cat_error] if cat_error in cat_error_msgs else cat_error }}
+  </div>
+  {% endif %}
+
+  <!-- Formulier: nieuwe categorie -->
+  <div id="cat-form-new" style="display:none;border:1px solid var(--stone);border-radius:8px;padding:16px;margin-bottom:20px;background:#f9f9f7;">
+    <div style="font-weight:600;margin-bottom:14px;font-size:14px;">Nieuwe categorie</div>
+    <form method="post" action="/instellingen/inkomsten-categorieen/nieuw">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Categorienaam *</label>
+          <input type="text" name="name" required placeholder="bijv. Verhuurinkomsten">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Omschrijving</label>
+          <input type="text" name="description" placeholder="Optionele omschrijving">
+        </div>
+        <div class="form-group">
+          <label>Voornaam contactpersoon</label>
+          <input type="text" name="contact_firstname" placeholder="Jan">
+        </div>
+        <div class="form-group">
+          <label>Achternaam contactpersoon</label>
+          <input type="text" name="contact_lastname" placeholder="Jansen">
+        </div>
+        <div class="form-group">
+          <label>Telefoonnummer</label>
+          <input type="tel" name="phone" placeholder="+31 6 12345678">
+        </div>
+        <div class="form-group">
+          <label>E-mailadres</label>
+          <input type="email" name="email" placeholder="naam@voorbeeld.nl">
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px;">
+        <button type="submit" class="btn btn-primary btn-sm">Categorie aanmaken</button>
+        <button type="button" onclick="toggleCatForm('new')" class="btn btn-outline btn-sm">Annuleren</button>
+      </div>
+    </form>
+  </div>
+
+  {% if income_categories %}
+  <div style="overflow-x:auto;">
+    <table class="table" style="font-size:13px;">
+      <thead>
+        <tr>
+          <th>Naam</th>
+          <th>Omschrijving</th>
+          <th>Contactpersoon</th>
+          <th>Telefoon</th>
+          <th>E-mail</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for cat in income_categories %}
+      <tr>
+        <td><strong>{{ cat.name }}</strong></td>
+        <td style="color:var(--mid)">{{ cat.description or '—' }}</td>
+        <td>{% if cat.contact_firstname or cat.contact_lastname %}{{ (cat.contact_firstname or '') + ' ' + (cat.contact_lastname or '') }}{% else %}—{% endif %}</td>
+        <td>{{ cat.phone or '—' }}</td>
+        <td>{{ cat.email or '—' }}</td>
+        <td style="white-space:nowrap;">
+          <button type="button" onclick="toggleCatForm({{ cat.id }})" class="btn btn-outline btn-sm">Bewerken</button>
+          <form method="post" action="/instellingen/inkomsten-categorieen/{{ cat.id }}/verwijderen" style="display:inline;">
+            <button type="submit" class="btn btn-sm" style="background:var(--danger,#e53935);color:#fff;border:none;"
+              onclick="return confirm('Categorie \'{{ cat.name }}\' definitief verwijderen?')">Verwijderen</button>
+          </form>
+        </td>
+      </tr>
+      <tr id="cat-form-{{ cat.id }}" style="display:none;background:#f9f9f7;">
+        <td colspan="6" style="padding:16px;">
+          <form method="post" action="/instellingen/inkomsten-categorieen/{{ cat.id }}/bewerken">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group" style="grid-column:1/-1;">
+                <label>Categorienaam *</label>
+                <input type="text" name="name" value="{{ cat.name }}" required>
+              </div>
+              <div class="form-group" style="grid-column:1/-1;">
+                <label>Omschrijving</label>
+                <input type="text" name="description" value="{{ cat.description or '' }}">
+              </div>
+              <div class="form-group">
+                <label>Voornaam contactpersoon</label>
+                <input type="text" name="contact_firstname" value="{{ cat.contact_firstname or '' }}">
+              </div>
+              <div class="form-group">
+                <label>Achternaam contactpersoon</label>
+                <input type="text" name="contact_lastname" value="{{ cat.contact_lastname or '' }}">
+              </div>
+              <div class="form-group">
+                <label>Telefoonnummer</label>
+                <input type="tel" name="phone" value="{{ cat.phone or '' }}" placeholder="+31 6 12345678">
+              </div>
+              <div class="form-group">
+                <label>E-mailadres</label>
+                <input type="email" name="email" value="{{ cat.email or '' }}" placeholder="naam@voorbeeld.nl">
+              </div>
+            </div>
+            <div style="margin-top:14px;display:flex;gap:8px;">
+              <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+              <button type="button" onclick="toggleCatForm({{ cat.id }})" class="btn btn-outline btn-sm">Annuleren</button>
+            </div>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:13px;color:var(--mid);">Nog geen categorieën aangemaakt. Klik op "+ Nieuwe categorie" om te beginnen.</p>
+  {% endif %}
+</div>
+
+<script>
+function toggleCatForm(id) {
+  const el = document.getElementById('cat-form-' + id);
+  if (!el) return;
+  if (el.tagName === 'TR') {
+    el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+  } else {
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+}
+{% if cat_error %}
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('inkomsten-categorieen').scrollIntoView({behavior: 'smooth'});
+  {% if cat_id %}
+  const editRow = document.getElementById('cat-form-{{ cat_id }}');
+  if (editRow) editRow.style.display = 'table-row';
+  {% else %}
+  document.getElementById('cat-form-new').style.display = 'block';
+  {% endif %}
+});
+{% endif %}
+</script>
+
 <div style="margin-top:20px;" class="card">
   <div class="section-title" style="margin-bottom:12px;">Standaard inloggegevens</div>
   <p style="font-size:13px;color:var(--light-text);">
