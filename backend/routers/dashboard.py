@@ -9,6 +9,7 @@ from backend.models.models import Income, Expense, ExpenseCategory, IncomeCatego
 from backend.routers.auth import require_auth
 from backend.routers.checklist import get_checklist_summary
 from backend.services.i18n import t
+from backend.services.pdf_export import generate_yearly_pdf
 from datetime import date, datetime
 from typing import Optional
 import csv
@@ -560,3 +561,32 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
     return StreamingResponse(buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=jaaroverzicht_{year}.xlsx"})
+
+
+@router.get("/export/jaaroverzicht-pdf")
+async def export_yearly_pdf(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    year = int(request.query_params.get("jaar", datetime.now().year))
+
+    monthly_inc = await db.execute(
+        select(func.strftime("%m", Income.date).label("month"), func.sum(Income.amount).label("total"))
+        .where(year_filter(Income, year)).group_by(func.strftime("%m", Income.date))
+    )
+    monthly_exp = await db.execute(
+        select(func.strftime("%m", Expense.date).label("month"), func.sum(Expense.amount).label("total"))
+        .where(year_filter(Expense, year)).group_by(func.strftime("%m", Expense.date))
+    )
+    inc_by_month = {int(r.month): float(r.total) for r in monthly_inc}
+    exp_by_month = {int(r.month): float(r.total) for r in monthly_exp}
+
+    fy_result = await db.execute(select(FiscalYear).where(FiscalYear.year == year))
+    fiscal_year = fy_result.scalar_one_or_none()
+
+    settings = request.state.settings
+    company = settings.company_name if settings else ""
+    buf = generate_yearly_pdf(year, inc_by_month, exp_by_month,
+                              company_name=company, fiscal_year=fiscal_year)
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=jaaroverzicht_{year}.pdf"})

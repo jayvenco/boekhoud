@@ -10,6 +10,7 @@
 </form>
 <a href="/export/jaaroverzicht?jaar={{ year }}" class="btn btn-outline btn-sm">↓ CSV</a>
 <a href="/export/jaaroverzicht-xlsx?jaar={{ year }}" class="btn btn-outline btn-sm">↓ Excel</a>
+<a href="/export/jaaroverzicht-pdf?jaar={{ year }}" class="btn btn-outline btn-sm" target="_blank">↓ PDF</a>
 {% if fiscal_year and fiscal_year.status == 'afgesloten' %}
   <span class="badge badge-warning" style="font-size:13px;padding:6px 12px;">🔒 Afgesloten</span>
 {% else %}

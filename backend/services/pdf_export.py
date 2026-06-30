@@ -130,6 +130,67 @@ def generate_incomes_pdf(incomes, company_name="", filters_desc="",
     return buf
 
 
+def generate_yearly_pdf(year, inc_by_month, exp_by_month,
+                        company_name="", fiscal_year=None) -> BytesIO:
+    month_names = ["Januari","Februari","Maart","April","Mei","Juni",
+                   "Juli","Augustus","September","Oktober","November","December"]
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    story = []
+    _header(story, f"Jaaroverzicht {year}", company_name, filters_desc="")
+
+    total_inc = sum(inc_by_month.values())
+    total_exp = sum(exp_by_month.values())
+    balance   = total_inc - total_exp
+
+    summary = Table(
+        [["Totale inkomsten", "Totale uitgaven", "Winst / Verlies"],
+         [f"€ {total_inc:,.2f}", f"€ {total_exp:,.2f}", f"€ {balance:,.2f}"]],
+        colWidths=[6*cm, 6*cm, 6*cm]
+    )
+    s = _summary_style()
+    s.add("TEXTCOLOR", (2, 1), (2, 1), SUCCESS if balance >= 0 else DANGER)
+    summary.setStyle(s)
+    story.append(summary)
+    story.append(Spacer(1, 0.4*cm))
+
+    headers = ["Maand", "Inkomsten (€)", "Uitgaven (€)", "Winst/Verlies (€)", "Cumulatief (€)"]
+    rows = [headers]
+    cumulative = 0
+    for m in range(1, 13):
+        inc = inc_by_month.get(m, 0)
+        exp = exp_by_month.get(m, 0)
+        profit = inc - exp
+        cumulative += profit
+        rows.append([
+            month_names[m - 1],
+            f"{inc:,.2f}",
+            f"{exp:,.2f}",
+            f"{profit:,.2f}",
+            f"{cumulative:,.2f}",
+        ])
+    rows.append(["Totaal", f"{total_inc:,.2f}", f"{total_exp:,.2f}",
+                 f"{balance:,.2f}", ""])
+
+    tbl = Table(rows, colWidths=[4*cm, 4.5*cm, 4.5*cm, 4.5*cm, 4.5*cm], repeatRows=1)
+    tbl.setStyle(_tbl_style(has_footer=True))
+    story.append(tbl)
+
+    if fiscal_year and fiscal_year.status == "afgesloten":
+        story.append(Spacer(1, 0.5*cm))
+        story.append(_P(
+            f"Boekjaar {year} is definitief afgesloten op "
+            f"{fiscal_year.closed_at.strftime('%d-%m-%Y') if fiscal_year.closed_at else '—'}.",
+            fontName="Helvetica-Oblique", fontSize=8.5, textColor=TEXT_LIGHT
+        ))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
 def generate_expenses_pdf(expenses, company_name="", filters_desc="") -> BytesIO:
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
