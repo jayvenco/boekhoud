@@ -115,6 +115,16 @@ app.include_router(checklist.router)
 app.include_router(fiscal_years.router)
 
 
+@app.get("/manifest.json")
+async def manifest():
+    return FileResponse("backend/static/manifest.json", media_type="application/manifest+json")
+
+@app.get("/sw.js")
+async def service_worker():
+    resp = FileResponse("backend/static/sw.js", media_type="application/javascript")
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}

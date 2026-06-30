@@ -2,10 +2,18 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>{% block title %}Boekhoud App{% endblock %}</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="shortcut icon" type="image/png" href="/static/favicon.png">
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#8B6F4E">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Boekhoud">
+  <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -430,11 +438,66 @@
     }
     .ocr-panel h3 { font-size: 13.5px; font-weight: 600; color: var(--green); margin-bottom: 8px; }
 
-    @media (max-width: 768px) {
-      .sidebar { transform: translateX(-100%); }
+    /* ── Hamburger ── */
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 7px;
+      border-radius: 7px;
+      color: var(--mid);
+      flex-shrink: 0;
+      line-height: 0;
+    }
+    .hamburger:hover { background: var(--green-pale); }
+
+    /* ── Sidebar overlay (mobile) ── */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 99;
+    }
+    .sidebar-overlay.open { display: block; }
+
+    /* ── Tablet + Mobile (≤ 900px): sidebar als overlay ── */
+    @media (max-width: 900px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        z-index: 200;
+      }
+      .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.18); }
       .main { margin-left: 0; }
-      .content { padding: 16px; }
+      .hamburger { display: flex; align-items: center; justify-content: center; }
+      .topbar { padding: 12px 16px; gap: 10px; }
+      .page-title { font-size: 16px; }
+      .content { padding: 14px; }
+      .stat-grid { gap: 10px; }
+      .card { padding: 16px; }
+    }
+
+    /* ── Mobiel (≤ 600px): aanvullende aanpassingen ── */
+    @media (max-width: 600px) {
       .stat-grid { grid-template-columns: 1fr 1fr; }
+      .stat-value { font-size: 20px; }
+      /* iOS: ≥16px voorkomt autozoom bij focus */
+      input, select, textarea { font-size: 16px; padding: 11px 12px; }
+      /* Minimale taptarget 44px */
+      .btn { min-height: 44px; padding: 10px 14px; }
+      .btn-sm { min-height: 40px; padding: 8px 12px; }
+      .btn-xs { min-height: 36px; padding: 6px 10px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .topbar-actions { gap: 6px; }
+    }
+
+    /* ── Heel klein scherm (≤ 380px) ── */
+    @media (max-width: 380px) {
+      .stat-grid { grid-template-columns: 1fr; }
+      .stat-card { padding: 14px 16px; }
+      .content { padding: 10px; }
     }
 
     /* ── Theme Switcher ──────────────────────────── */
@@ -477,7 +540,8 @@
 </head>
 <body>
   {% if request.state.user %}
-  <aside class="sidebar">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <img src="/static/logo.png"
            onerror="this.style.display='none'"
@@ -559,7 +623,16 @@
   <main class="main">
     {% if request.state.user %}
     <div class="topbar">
-      <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu openen">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <h1 class="page-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{% block page_title %}{% endblock %}</h1>
+      </div>
       <div class="topbar-actions">
         {% block topbar_actions %}{% endblock %}
         <div class="theme-switcher" id="themeSwitcher">
@@ -584,6 +657,37 @@
   </main>
 
 <script>
+/* ── Sidebar toggle (mobiel/tablet) ── */
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('open');
+  document.body.style.overflow = document.getElementById('sidebar').classList.contains('open') ? 'hidden' : '';
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+// Sluit sidebar na klikken op nav-link (mobiel)
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.nav-link').forEach(function(link) {
+    link.addEventListener('click', function() {
+      if (window.innerWidth <= 900) closeSidebar();
+    });
+  });
+});
+// Sluit sidebar bij resize naar desktop
+window.addEventListener('resize', function() {
+  if (window.innerWidth > 900) closeSidebar();
+});
+
+/* ── Service Worker registratie ── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function() {});
+  });
+}
+
 const THEMES = {
   light: '☀️', dark: '🌙', green: '🌿',
   gray: '🩶', minimal: '🤍', royal: '💙'
