@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Instellingen{% endblock %}
+{% block page_title %}Instellingen{% endblock %}
+
+{% block content %}
+{% if success == "1" %}
+<div class="alert alert-success">✅ Instellingen opgeslagen.</div>
+{% endif %}
+{% if error == "factuurformaat" %}
+<div class="alert alert-error">⚠️ Ongeldig nummerformaat. Gebruik alleen de plaatshouders <code>{year}</code> en <code>{number}</code>, bijvoorbeeld <code>{year}-{number}</code>.</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+  <div class="card">
+    <div class="section-title" style="margin-bottom:20px;">Bedrijfsinstellingen</div>
+    {% if pw_error %}
+    <div class="alert alert-error">{{ pw_error }}</div>
+    {% endif %}
+    <form method="post" action="/instellingen" enctype="multipart/form-data">
+      <div class="form-group" style="margin-bottom:16px;">
+        <label>Bedrijfsnaam</label>
+        <input type="text" name="company_name" value="{{ settings.company_name if settings else 'Mijn Praktijk' }}">
+      </div>
+      <div class="form-group" style="margin-bottom:20px;">
+        <label>Bedrijfslogo (PNG/JPG)</label>
+        <input type="file" name="logo" accept=".png,.jpg,.jpeg">
+        {% if settings and settings.logo_path %}
+        <div style="margin-top:8px;">
+          <img src="/uploads/logo/{{ settings.logo_path.split('/')[-1] }}" style="max-height:60px;border-radius:6px;" alt="Logo">
+        </div>
+        {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary">Opslaan</button>
+    </form>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:20px;">Wachtwoord wijzigen</div>
+      <form method="post" action="/instellingen/wachtwoord">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Huidig wachtwoord</label>
+          <input type="password" name="current_password" required>
+        </div>
+        <div class="form-group" style="margin-bottom:18px;">
+          <label>Nieuw wachtwoord</label>
+          <input type="password" name="new_password" required minlength="6">
+        </div>
+        <button type="submit" class="btn btn-outline">Wachtwoord wijzigen</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Back-ups</div>
+      <p style="font-size:13px;color:var(--light-text);margin-bottom:16px;">
+        Stel in hoe vaak automatisch een back-up wordt gemaakt en wat de bewaartermijn is.
+      </p>
+      <form method="post" action="/instellingen/backups">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Back-upfrequentie</label>
+          <select name="frequency">
+            {% set freq = backup_settings.frequency if backup_settings else 'wekelijks' %}
+            <option value="handmatig" {% if freq == 'handmatig' %}selected{% endif %}>Handmatig</option>
+            <option value="elk_uur" {% if freq == 'elk_uur' %}selected{% endif %}>Elk uur</option>
+            <option value="dagelijks" {% if freq == 'dagelijks' %}selected{% endif %}>Dagelijks</option>
+            <option value="wekelijks" {% if freq == 'wekelijks' %}selected{% endif %}>Wekelijks</option>
+            <option value="maandelijks" {% if freq == 'maandelijks' %}selected{% endif %}>Maandelijks</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Bewaartermijn</label>
+          <select name="retention_type" id="retention_type" onchange="toggleRetentionCustom()">
+            {% set ret = backup_settings.retention_type if backup_settings else '10' %}
+            <option value="5" {% if ret == '5' %}selected{% endif %}>Laatste 5 back-ups bewaren</option>
+            <option value="10" {% if ret == '10' %}selected{% endif %}>Laatste 10 back-ups bewaren</option>
+            <option value="25" {% if ret == '25' %}selected{% endif %}>Laatste 25 back-ups bewaren</option>
+            <option value="50" {% if ret == '50' %}selected{% endif %}>Laatste 50 back-ups bewaren</option>
+            <option value="onbeperkt" {% if ret == 'onbeperkt' %}selected{% endif %}>Onbeperkt bewaren</option>
+            <option value="aangepast" {% if ret == 'aangepast' %}selected{% endif %}>Aangepast aantal…</option>
+          </select>
+        </div>
+        <div class="form-group" id="retention_custom_group" style="margin-bottom:18px;display:{% if backup_settings and backup_settings.retention_type == 'aangepast' %}block{% else %}none{% endif %};">
+          <label>Aantal te bewaren back-ups</label>
+          <input type="number" name="retention_custom_count" min="1"
+                 value="{{ backup_settings.retention_custom_count if backup_settings and backup_settings.retention_custom_count else 10 }}">
+        </div>
+        <button type="submit" class="btn btn-outline">Back-upinstellingen opslaan</button>
+      </form>
+      <div style="margin-top:16px;border-top:1px solid var(--stone);padding-top:16px;">
+        <a href="/backups" class="btn btn-primary" style="width:100%;justify-content:center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Back-upbeheer openen
+        </a>
+      </div>
+    </div>
+
+    <script>
+    function toggleRetentionCustom() {
+      const sel = document.getElementById('retention_type');
+      document.getElementById('retention_custom_group').style.display =
+        sel.value === 'aangepast' ? 'block' : 'none';
+    }
+    </script>
+
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Factuurnummering</div>
+      <p style="font-size:13px;color:var(--light-text);margin-bottom:16px;">
+        {{ t('invoice_numbering_hint') }}
+        Inkomsten en uitgaven hebben elk hun eigen nummerformaat, zodat ze direct van elkaar te onderscheiden zijn.
+      </p>
+      <form method="post" action="/instellingen/factuurnummering">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="checkbox-row">
+            <input type="checkbox" name="auto_enabled" {% if not invoice_numbering_settings or invoice_numbering_settings.auto_enabled %}checked{% endif %}>
+            <span>Automatische nummering inschakelen</span>
+          </label>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Voorloopnullen (aantal cijfers)</label>
+          <select name="padding">
+            {% set pad = invoice_numbering_settings.padding if invoice_numbering_settings else 3 %}
+            <option value="3" {% if pad == 3 %}selected{% endif %}>3 cijfers (001)</option>
+            <option value="4" {% if pad == 4 %}selected{% endif %}>4 cijfers (0001)</option>
+            <option value="5" {% if pad == 5 %}selected{% endif %}>5 cijfers (00001)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Nummerformaat inkomsten</label>
+          <input type="text" name="format_template_income"
+                 value="{{ invoice_numbering_settings.format_template_income if invoice_numbering_settings else 'I-{year}-{number}' }}"
+                 placeholder="I-{year}-{number}">
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Nummerformaat uitgaven</label>
+          <input type="text" name="format_template_expense"
+                 value="{{ invoice_numbering_settings.format_template_expense if invoice_numbering_settings else 'U-{year}-{number}' }}"
+                 placeholder="U-{year}-{number}">
+        </div>
+        <p style="font-size:12px;color:var(--light-text);margin-bottom:18px;">Beschikbare plaatshouders: <code>{year}</code> en <code>{number}</code>.</p>
+        <button type="submit" class="btn btn-outline">Factuurnummering opslaan</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="section-title" style="margin-bottom:0;">AI-instellingen</div>
+        {% set st = ai_settings.last_status if ai_settings else 'niet_geconfigureerd' %}
+        <span id="ai-status-badge" class="badge {% if st == 'verbonden' %}badge-success{% elif st in ['ongeldig','onbereikbaar'] %}badge-danger{% elif st == 'onbekend' %}badge-warning{% else %}badge-neutral{% endif %}">
+          {% if st == 'verbonden' %}Verbonden
+          {% elif st == 'ongeldig' %}Ongeldig API-token
+          {% elif st == 'onbereikbaar' %}Niet bereikbaar
+          {% elif st == 'onbekend' %}Nog niet getest
+          {% else %}Niet geconfigureerd{% endif %}
+        </span>
+      </div>
+      <p style="font-size:13px;color:var(--light-text);margin-bottom:16px;">
+        {{ t('ai_settings_ocr_hint') }}
+      </p>
+      <form method="post" action="/instellingen/ai" id="ai-settings-form">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Provider</label>
+          <select name="provider" id="ai_provider" onchange="toggleAiProvider()">
+            {% set active_provider = ai_settings.provider if ai_settings else 'openai' %}
+            {% for pid, p in ai_providers.items() %}
+            <option value="{{ pid }}" {% if pid == active_provider %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Model</label>
+          <select name="model" id="ai_model"></select>
+        </div>
+
+        {% for pid, p in ai_providers.items() %}
+        <div class="form-group ai-key-group" id="ai_key_group_{{ pid }}" style="margin-bottom:14px;display:none;">
+          <label>API-sleutel — {{ p.name }}</label>
+          <input type="password" name="{{ pid }}_api_key" id="{{ pid }}_api_key"
+                 placeholder="{% if ai_key_masks.get(pid) %}{{ ai_key_masks[pid] }} (laat leeg om te behouden){% else %}bijv. sk-... {% endif %}"
+                 autocomplete="off">
+          {% if ai_key_masks.get(pid) %}
+          <label class="checkbox-row" style="margin-top:6px;font-size:12px;">
+            <input type="checkbox" name="{{ pid }}_api_key_clear">
+            <span>API-sleutel verwijderen</span>
+          </label>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button type="submit" class="btn btn-primary">Opslaan</button>
+          <button type="button" class="btn btn-outline" onclick="testAiConnection()" id="ai-test-btn">Testverbinding</button>
+        </div>
+        <div id="ai-test-message" style="margin-top:10px;font-size:13px;"></div>
+      </form>
+    </div>
+
+    <script>
+    const AI_MODELS = {{ ai_provider_models | tojson }};
+    const AI_ACTIVE_MODEL = {{ (ai_settings.model if ai_settings and ai_settings.model else '') | tojson }};
+
+    function toggleAiProvider() {
+      const provider = document.getElementById('ai_provider').value;
+      document.querySelectorAll('.ai-key-group').forEach(el => el.style.display = 'none');
+      const group = document.getElementById('ai_key_group_' + provider);
+      if (group) group.style.display = 'block';
+
+      const modelSelect = document.getElementById('ai_model');
+      modelSelect.innerHTML = '';
+      (AI_MODELS[provider] || []).forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label;
+        if (m.id === AI_ACTIVE_MODEL) opt.selected = true;
+        modelSelect.appendChild(opt);
+      });
+    }
+
+    async function testAiConnection() {
+      const btn = document.getElementById('ai-test-btn');
+      const msg = document.getElementById('ai-test-message');
+      const badge = document.getElementById('ai-status-badge');
+      const provider = document.getElementById('ai_provider').value;
+      const keyInput = document.getElementById(provider + '_api_key');
+      const apiKey = keyInput ? keyInput.value : '';
+
+      btn.disabled = true;
+      msg.textContent = 'Verbinding testen…';
+      msg.style.color = 'var(--light-text)';
+
+      const fd = new FormData();
+      fd.append('provider', provider);
+      fd.append('api_key', apiKey);
+
+      try {
+        const resp = await fetch('/instellingen/ai/test', { method: 'POST', body: fd });
+        const data = await resp.json();
+        msg.textContent = data.message;
+        msg.style.color = data.ok ? 'var(--success)' : 'var(--danger)';
+
+        badge.className = 'badge ' + (
+          data.status === 'verbonden' ? 'badge-success' :
+          (data.status === 'ongeldig' || data.status === 'onbereikbaar') ? 'badge-danger' :
+          data.status === 'onbekend' ? 'badge-warning' : 'badge-neutral'
+        );
+        const labels = {
+          verbonden: 'Verbonden', ongeldig: 'Ongeldig API-token',
+          onbereikbaar: 'Niet bereikbaar', onbekend: 'Nog niet getest',
+          niet_geconfigureerd: 'Niet geconfigureerd'
+        };
+        badge.textContent = labels[data.status] || data.status;
+      } catch (e) {
+        msg.textContent = 'Fout bij testen van verbinding.';
+        msg.style.color = 'var(--danger)';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', toggleAiProvider);
+    </script>
+  </div>
+</div>
+
+<div style="margin-top:20px;" class="card">
+  <div class="section-title" style="margin-bottom:12px;">Standaard inloggegevens</div>
+  <p style="font-size:13px;color:var(--light-text);">
+    Gebruikersnaam: <strong>admin</strong> — Wachtwoord: <strong>admin123</strong><br>
+    <span style="color:var(--danger)">⚠️ Wijzig het wachtwoord direct na de eerste login!</span>
+  </p>
+</div>
+{% endblock %}

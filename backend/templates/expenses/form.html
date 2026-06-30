@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block title %}{% if expense %}Uitgave bewerken{% else %}Nieuwe uitgave{% endif %}{% endblock %}
+{% block page_title %}{% if expense %}Uitgave bewerken{% else %}Nieuwe uitgave{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/uitgaven" class="btn btn-outline">← Terug</a>
+{% endblock %}
+
+{% block content %}
+{% if not expense %}
+<div class="ocr-panel">
+  <h3>🤖 AI Scan &amp; Herken</h3>
+  <p style="font-size:13px;color:var(--mid);margin-bottom:12px">{{ t('ocr_panel_hint') }}</p>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <input type="file" id="ocr-file" accept=".pdf,.jpg,.jpeg,.png" style="flex:1;font-size:13px;">
+    <button type="button" onclick="runOcr()" class="btn btn-primary btn-sm" id="ocr-btn">Uitlezen</button>
+  </div>
+  <div id="ocr-status" style="margin-top:10px;font-size:13px;color:var(--mid)"></div>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" enctype="multipart/form-data">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="invoice_number">Factuurnummer *
+          <span id="invoice_number_badge" class="badge badge-neutral" style="display:none;font-weight:400;">Automatisch gegenereerd</span>
+        </label>
+        <input type="text" id="invoice_number" name="invoice_number" required
+               value="{{ expense.invoice_number if expense else '' }}" placeholder="bijv. 2026-001">
+      </div>
+      <div class="form-group">
+        <label for="category_id">Categorie *</label>
+        <select id="category_id" name="category_id" required>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if expense and expense.category_id == cat.id %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="date">Datum *</label>
+        <input type="date" id="date" name="date" onchange="autoInvoiceNumber(this.value)"
+               value="{{ expense.date.strftime('%Y-%m-%d') if expense else '' }}"
+               style="cursor:pointer;" required>
+      </div>
+      <div class="form-group">
+        <label for="amount">Bedrag (€) *</label>
+        <input type="number" id="amount" name="amount" step="0.01" min="0" required
+               value="{{ expense.amount if expense else '' }}" placeholder="0.00"
+               oninput="updateDepPreview()">
+      </div>
+      <div class="form-group form-full">
+        <label for="description">Omschrijving</label>
+        <textarea id="description" name="description" placeholder="Optionele omschrijving…">{{ expense.description if expense else '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="receipts">{{ t('receipt_upload_label') }}</label>
+        <input type="file" id="receipts" name="receipts" accept=".pdf,.jpg,.jpeg,.png" multiple>
+        <input type="hidden" id="ocr_tmp_file" name="ocr_tmp_file" value="">
+        {% if expense and expense.receipt_path %}
+        <div style="margin-top:6px;font-size:13px;color:var(--mid)">
+          Huidig: <a href="/uploads/{{ expense.receipt_path }}" target="_blank" style="color:var(--green)">{{ t('receipt_view_link') }}</a>
+        </div>
+        {% endif %}
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;padding-top:22px;">
+        <label class="checkbox-row">
+          <input type="checkbox" name="is_depreciable" id="is_depreciable"
+                 {% if expense and expense.is_depreciable %}checked{% endif %}
+                 onchange="toggleDep()">
+          <span>Afschrijfbare investering</span>
+        </label>
+      </div>
+      {% if not expense or not expense.is_auto_generated %}
+      <div class="form-group" style="display:flex;align-items:center;padding-top:22px;">
+        <label class="checkbox-row">
+          <input type="checkbox" name="is_recurring" id="is_recurring"
+                 {% if expense and expense.is_recurring %}checked{% endif %}
+                 onchange="toggleRecurring()">
+          <span>Terugkerende kosten / Abonnement</span>
+        </label>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if expense and expense.is_auto_generated %}
+    <div style="margin-top:14px;padding:12px 16px;background:var(--beige);border-radius:var(--radius);font-size:13px;color:var(--mid);">
+      Dit is een automatisch gegenereerde uitgave van een abonnement.
+      <a href="/uitgaven/{{ expense.parent_recurring_expense_id }}/bewerken" style="color:var(--green);">Bekijk de oorspronkelijke registratie</a>
+      om de frequentie of looptijd aan te passen.
+    </div>
+    {% endif %}
+
+    <div id="recurring-panel" style="display:{% if expense and expense.is_recurring and not expense.is_auto_generated %}block{% else %}none{% endif %};margin-top:18px;padding:18px;background:var(--sage-pale);border:1px solid var(--sage-light);border-radius:var(--radius);">
+      <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:12px;">🔁 Abonnementsinstellingen</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="recurring_start_date">Startdatum</label>
+          <input type="date" id="recurring_start_date" name="recurring_start_date"
+                 value="{{ expense.recurring_start_date.strftime('%Y-%m-%d') if expense and expense.recurring_start_date else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="recurring_end_date">Einddatum (optioneel)</label>
+          <input type="date" id="recurring_end_date" name="recurring_end_date"
+                 value="{{ expense.recurring_end_date.strftime('%Y-%m-%d') if expense and expense.recurring_end_date else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="recurring_frequency">Frequentie</label>
+          <select id="recurring_frequency" name="recurring_frequency">
+            {% set current_freq = expense.recurring_frequency if expense and expense.recurring_frequency else 'maandelijks' %}
+            <option value="maandelijks" {% if current_freq == 'maandelijks' %}selected{% endif %}>Maandelijks</option>
+            <option value="per_kwartaal" {% if current_freq == 'per_kwartaal' %}selected{% endif %}>Per kwartaal</option>
+            <option value="halfjaarlijks" {% if current_freq == 'halfjaarlijks' %}selected{% endif %}>Halfjaarlijks</option>
+            <option value="jaarlijks" {% if current_freq == 'jaarlijks' %}selected{% endif %}>Jaarlijks</option>
+          </select>
+        </div>
+      </div>
+      <p style="margin-top:12px;font-size:12.5px;color:var(--mid);line-height:1.6;">
+        ℹ️ {{ t('recurring_info_text') }}
+      </p>
+    </div>
+
+    {% if expense and expense.is_recurring %}
+    <div style="margin-top:18px;padding:18px;border:1px solid var(--stone);border-radius:var(--radius);">
+      <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:10px;">Wijzigingen toepassen op</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+        <label class="checkbox-row"><input type="radio" name="edit_scope" value="alleen_deze" checked><span>Alleen deze uitgave wijzigen</span></label>
+        <label class="checkbox-row"><input type="radio" name="edit_scope" value="deze_en_toekomstig"><span>Deze en alle toekomstige uitgaven wijzigen</span></label>
+        <label class="checkbox-row"><input type="radio" name="edit_scope" value="volledige_reeks"><span>De volledige reeks wijzigen</span></label>
+      </div>
+    </div>
+
+    {% if not expense.is_auto_generated %}
+    <div style="margin-top:14px;padding:14px 18px;border:1px solid var(--danger-light);border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <div style="font-size:13px;color:var(--mid);">
+        {% if expense.recurring_active %}Abonnement is actief — er worden automatisch nieuwe uitgaven gegenereerd.
+        {% else %}Abonnement is stopgezet.{% endif %}
+      </div>
+      {% if expense.recurring_active %}
+      <form method="post" action="/uitgaven/{{ expense.id }}/abonnement/stopzetten"
+            onsubmit="return confirm('Abonnement stopzetten? Er worden geen nieuwe uitgaven meer aangemaakt.')">
+        <label class="checkbox-row" style="font-size:12px;margin-bottom:6px;">
+          <input type="checkbox" name="delete_future"><span>Ook toekomstige automatisch gegenereerde uitgaven verwijderen</span>
+        </label>
+        <button type="submit" class="btn btn-danger btn-sm">Abonnement stopzetten</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <div id="dep-panel" style="display:{% if expense and expense.is_depreciable %}block{% else %}none{% endif %};margin-top:18px;padding:18px;background:var(--green-pale);border:1px solid var(--green-light);border-radius:var(--radius);">
+      <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:12px;">📊 Afschrijvingsinstellingen</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="dep_start_date">Startdatum afschrijving</label>
+          <input type="date" id="dep_start_date" name="dep_start_date"
+                 value="{{ expense.depreciation.start_date.strftime('%Y-%m-%d') if expense and expense.depreciation else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="dep_duration">Looptijd (jaren)</label>
+          <select id="dep_duration" name="dep_duration" onchange="updateDepPreview()">
+            {% set current_duration = expense.depreciation.duration_years if expense and expense.depreciation else 5 %}
+            {% for y in range(2, 11) %}
+            <option value="{{ y }}" {% if y == current_duration %}selected{% endif %}>{{ y }} jaar</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="dep_residual_value">Restwaarde na looptijd (€)</label>
+          <input type="number" id="dep_residual_value" name="dep_residual_value" step="0.01" min="0"
+                 onchange="updateDepPreview()" oninput="updateDepPreview()"
+                 value="{{ expense.depreciation.residual_value if expense and expense.depreciation else 0 }}">
+        </div>
+      </div>
+      <div id="dep-preview" style="margin-top:12px;font-size:13px;color:var(--green);"></div>
+    </div>
+
+    <div style="margin-top:22px;display:flex;gap:12px;">
+      <button type="submit" class="btn btn-primary">
+        {% if expense %}Wijzigingen opslaan{% else %}Uitgave opslaan{% endif %}
+      </button>
+      <a href="/uitgaven" class="btn btn-outline">Annuleren</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function toggleDep() {
+  document.getElementById('dep-panel').style.display =
+    document.getElementById('is_depreciable').checked ? 'block' : 'none';
+  updateDepPreview();
+}
+
+function toggleRecurring() {
+  const checkbox = document.getElementById('is_recurring');
+  const panel = document.getElementById('recurring-panel');
+  if (checkbox && panel) {
+    panel.style.display = checkbox.checked ? 'block' : 'none';
+  }
+}
+
+function updateDepPreview() {
+  const preview = document.getElementById('dep-preview');
+  if (!preview) return;
+  const amount = parseFloat(document.getElementById('amount').value) || 0;
+  const duration = parseInt(document.getElementById('dep_duration').value) || 0;
+  const residual = parseFloat(document.getElementById('dep_residual_value').value) || 0;
+  if (!duration || amount <= 0) { preview.textContent = ''; return; }
+  if (residual > amount) {
+    preview.style.color = 'var(--danger)';
+    preview.textContent = '⚠️ Restwaarde kan niet hoger zijn dan het aankoopbedrag.';
+    return;
+  }
+  const annual = (amount - residual) / duration;
+  preview.style.color = 'var(--green)';
+  preview.textContent = `€ ${annual.toFixed(2)} per jaar gedurende ${duration} jaar (€ ${amount.toFixed(2)} − € ${residual.toFixed(2)} restwaarde).`;
+}
+
+document.addEventListener('DOMContentLoaded', updateDepPreview);
+
+function fillDatePicker(val) {
+  if (!val) return;
+  let isoDate = val;
+  const dotParts = val.split('.');
+  const dashParts = val.split('-');
+  if (dotParts.length === 3 && dotParts[2].length === 4) {
+    isoDate = dotParts[2] + '-' + dotParts[1] + '-' + dotParts[0];
+  } else if (dashParts.length === 3 && dashParts[0].length === 2) {
+    isoDate = dashParts[2] + '-' + dashParts[1] + '-' + dashParts[0];
+  }
+  document.getElementById('date').value = isoDate;
+}
+
+async function runOcr() {
+  const fileInput = document.getElementById('ocr-file');
+  const btn = document.getElementById('ocr-btn');
+  const status = document.getElementById('ocr-status');
+  if (!fileInput.files[0]) { status.textContent = 'Selecteer eerst een bestand.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Bezig…';
+  status.textContent = {{ t('receipt_being_read') | tojson }};
+
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+
+  try {
+    const resp = await fetch('/ocr/upload', { method: 'POST', body: fd });
+    if (!resp.ok) { status.textContent = '⚠️ Serverfout: ' + resp.status; return; }
+    const data = await resp.json();
+    if (data.error) { status.textContent = '⚠️ ' + data.error; return; }
+    let filled = [];
+    if (data.invoice_number) {
+      const invField = document.getElementById('invoice_number');
+      invField.value = data.invoice_number;
+      invField.dataset.autoFilled = 'false';
+      updateInvoiceNumberBadge();
+      filled.push('factuurnummer');
+    }
+    if (data.date) {
+      fillDatePicker(data.date);
+      autoInvoiceNumber(document.getElementById('date').value);
+      filled.push('datum');
+    }
+    if (data.amount) { document.getElementById('amount').value = data.amount; filled.push('bedrag'); }
+    if (data.description) { document.getElementById('description').value = data.description; filled.push('omschrijving'); }
+    if (data._tmp_file) {
+      document.getElementById('ocr_tmp_file').value = data._tmp_file;
+      // Show that bon is ready
+      const receiptInput = document.getElementById('receipt');
+      if (receiptInput) {
+        receiptInput.style.opacity = '0.5';
+        const hint = document.createElement('div');
+        hint.style = 'font-size:12px;color:var(--green);margin-top:4px;';
+        hint.textContent = {{ t('receipt_ready_prefix') | tojson }} + (data._original_filename || data._tmp_file);
+        receiptInput.parentNode.appendChild(hint);
+      }
+    }
+    if (data._tmp_file) {
+      document.getElementById('ocr_tmp_file').value = data._tmp_file;
+    }
+    if (data.category_suggestion) {
+      const sel = document.getElementById('category_id');
+      for (let opt of sel.options) {
+        if (opt.text.toLowerCase().includes(data.category_suggestion.toLowerCase()) ||
+            data.category_suggestion.toLowerCase().includes(opt.text.toLowerCase())) {
+          sel.value = opt.value;
+          filled.push('categorie');
+          break;
+        }
+      }
+    }
+    if (filled.length > 0) {
+      status.textContent = '✅ Ingevuld: ' + filled.join(', ') + '. Controleer en pas aan.';
+    } else if (data._ai_error) {
+      status.textContent = '⚠️ ' + data._ai_error;
+    } else {
+      status.textContent = '⚠️ Geen gegevens herkend (tekst wel uitgelezen). Controleer of een AI-provider is ingesteld bij Instellingen, of vul handmatig in.';
+    }
+  } catch(e) {
+    status.textContent = '⚠️ Fout: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Uitlezen';
+  }
+}
+
+const AUTO_NUMBERING_ENABLED = {{ (auto_numbering_enabled if auto_numbering_enabled is defined else True) | tojson }};
+
+function updateInvoiceNumberBadge() {
+  const invField = document.getElementById('invoice_number');
+  const badge = document.getElementById('invoice_number_badge');
+  if (!invField || !badge) return;
+  badge.style.display = invField.dataset.autoFilled === 'true' ? 'inline-block' : 'none';
+}
+
+function autoInvoiceNumber(dateVal) {
+  if (!dateVal || !AUTO_NUMBERING_ENABLED) return;
+  const invField = document.getElementById('invoice_number');
+  // Only auto-fill if field is empty or was auto-filled before
+  if (invField.dataset.autoFilled === 'false' && invField.value) return;
+  const year = dateVal.split('-')[0];
+  fetch(`/api/volgend-factuurnummer?jaar=${year}&type=uitgaven`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.invoice_number) return;
+      invField.value = data.invoice_number;
+      invField.dataset.autoFilled = 'true';
+      updateInvoiceNumberBadge();
+    })
+    .catch(() => {});
+}
+
+// Mark field as manually edited if user types in it
+document.addEventListener('DOMContentLoaded', function() {
+  const invField = document.getElementById('invoice_number');
+  if (invField) {
+    invField.dataset.autoFilled = invField.value ? 'false' : 'true';
+    updateInvoiceNumberBadge();
+    invField.addEventListener('input', function() {
+      this.dataset.autoFilled = 'false';
+      updateInvoiceNumberBadge();
+    });
+  }
+});
+</script>
+{% endblock %}

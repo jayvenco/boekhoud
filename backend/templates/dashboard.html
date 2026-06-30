@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard {{ year }}{% endblock %}
+
+{% block topbar_actions %}
+<span style="font-size:13px;color:var(--light-text)">Welkom terug</span>
+{% endblock %}
+
+{% block content %}
+{% if missing_receipts_count %}
+<div class="alert alert-error" style="margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;">
+  <span>⚠️ {{ t('missing_receipts_alert').format(count=missing_receipts_count) }}</span>
+  <a href="/uitgaven" class="btn btn-outline btn-sm">Bekijk uitgaven</a>
+</div>
+{% endif %}
+{% if checklist_summary and checklist_summary.total %}
+<div class="card" style="margin-bottom:20px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <span class="section-title" style="margin-bottom:0;">Controlechecklist</span>
+    <a href="/checklist" class="btn btn-outline btn-sm">Bekijk checklist</a>
+  </div>
+  <p style="font-size:13px;color:var(--light-text);margin-bottom:10px;">
+    Controlechecklist: {{ checklist_summary.completed }} van de {{ checklist_summary.total }} taken voltooid ({{ checklist_summary.percentage }}%).
+  </p>
+  <div style="background:var(--stone);border-radius:4px;height:8px;">
+    <div style="background:var(--sage);height:8px;border-radius:4px;width:{{ checklist_summary.percentage }}%;"></div>
+  </div>
+</div>
+{% endif %}
+<div class="stat-grid">
+  <div class="stat-card income">
+    <div class="stat-label">Totale inkomsten</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_income) }}</div>
+    <div class="stat-sub">Dit jaar</div>
+  </div>
+  <div class="stat-card expense">
+    <div class="stat-label">Totale uitgaven</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_expenses) }}</div>
+    <div class="stat-sub">Dit jaar</div>
+  </div>
+  <div class="stat-card {% if profit >= 0 %}income{% else %}expense{% endif %}">
+    <div class="stat-label">Winst / Verlies</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(profit) }}</div>
+    <div class="stat-sub">Dit jaar</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-label">Openstaand</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(unpaid) }}</div>
+    <div class="stat-sub">Niet betaald</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:28px;">
+  <div class="section-header">
+    <span class="section-title">Maandoverzicht {{ year }}</span>
+  </div>
+  <canvas id="monthChart" height="90"></canvas>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">Recente inkomsten</span>
+      <a href="/inkomsten" class="btn btn-outline btn-sm">Alle</a>
+    </div>
+    {% if recent_incomes %}
+    <table>
+      <thead><tr><th>Datum</th><th>Omschrijving</th><th>Bedrag</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for i in recent_incomes %}
+        <tr>
+          <td>{{ i.date.strftime("%d-%m-%Y") }}</td>
+          <td>{{ i.description[:30] if i.description else i.invoice_number }}</td>
+          <td class="amount amount-positive">€ {{ "%.2f"|format(i.amount) }}</td>
+          <td>
+            {% if i.status == "betaald" %}
+              <span class="badge badge-success">Betaald</span>
+            {% else %}
+              <span class="badge badge-warning">Openstaand</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><div class="empty-state-icon">📄</div><p>Nog geen inkomsten</p></div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">Recente uitgaven</span>
+      <a href="/uitgaven" class="btn btn-outline btn-sm">Alle</a>
+    </div>
+    {% if recent_expenses %}
+    <table>
+      <thead><tr><th>Datum</th><th>Omschrijving</th><th>Categorie</th><th>Bedrag</th></tr></thead>
+      <tbody>
+        {% for e in recent_expenses %}
+        <tr>
+          <td>{{ e.date.strftime("%d-%m-%Y") }}</td>
+          <td>{{ e.description[:25] if e.description else e.invoice_number }}</td>
+          <td><span class="badge badge-neutral">{{ e.category.name }}</span></td>
+          <td class="amount amount-negative">€ {{ "%.2f"|format(e.amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><div class="empty-state-icon">🧾</div><p>Nog geen uitgaven</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+const ctx = document.getElementById('monthChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: {{ chart_months | tojson }},
+    datasets: [
+      {
+        label: 'Inkomsten',
+        data: {{ chart_income | tojson }},
+        backgroundColor: 'rgba(90, 144, 112, 0.7)',
+        borderColor: '#5A9070',
+        borderWidth: 1.5,
+        borderRadius: 6,
+      },
+      {
+        label: 'Uitgaven',
+        data: {{ chart_expenses | tojson }},
+        backgroundColor: 'rgba(192, 102, 90, 0.5)',
+        borderColor: '#C0665A',
+        borderWidth: 1.5,
+        borderRadius: 6,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top', labels: { font: { family: 'DM Sans', size: 13 } } },
+      tooltip: {
+        callbacks: { label: ctx => `€ ${ctx.parsed.y.toFixed(2)}` }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { callback: v => `€ ${v}`, font: { family: 'DM Sans', size: 12 } },
+        grid: { color: '#E8E3DC' }
+      },
+      x: {
+        ticks: { font: { family: 'DM Sans', size: 12 } },
+        grid: { display: false }
+      }
+    }
+  }
+});
+</script>
+{% endblock %}

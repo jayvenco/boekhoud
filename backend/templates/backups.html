@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Back-ups{% endblock %}
+{% block page_title %}Back-upbeheer{% endblock %}
+
+{% block topbar_actions %}
+<form method="post" action="/backups/nu">
+  <button type="submit" class="btn btn-primary">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Nu back-up maken
+  </button>
+</form>
+{% endblock %}
+
+{% block content %}
+{% if success == "1" %}
+<div class="alert alert-success">✅ Back-up succesvol aangemaakt.</div>
+{% elif success == "restore" %}
+<div class="alert alert-success">✅ Back-up succesvol hersteld. De gegevens zijn teruggezet.</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-error">⚠️ {{ error }}</div>
+{% endif %}
+
+<div class="table-wrap">
+  {% if backups %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Datum &amp; tijd</th><th>Type</th><th>Grootte</th><th>Status</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in backups %}
+      <tr>
+        <td style="font-weight:500;color:var(--dark)">#{{ b.id }}</td>
+        <td>{{ b.created_at.strftime("%d-%m-%Y %H:%M:%S") }}</td>
+        <td>
+          {% if b.type == "handmatig" %}
+          <span class="badge badge-neutral">Handmatig</span>
+          {% else %}
+          <span class="badge badge-neutral">Automatisch</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if b.size_bytes %}
+            {% if b.size_bytes > 1048576 %}
+              {{ "%.2f"|format(b.size_bytes / 1048576) }} MB
+            {% else %}
+              {{ "%.0f"|format(b.size_bytes / 1024) }} KB
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if b.status == "voltooid" %}
+          <span class="badge badge-success">Voltooid</span>
+          {% elif b.status == "corrupt" %}
+          <span class="badge badge-danger">Corrupt</span>
+          {% else %}
+          <span class="badge badge-danger">Mislukt</span>
+          {% endif %}
+          {% if b.note and b.status != "voltooid" %}
+          <div style="font-size:11px;color:var(--light-text);margin-top:2px;">{{ b.note[:80] }}</div>
+          {% endif %}
+        </td>
+        <td>
+          {% if b.status == "voltooid" %}
+          <form method="post" action="/backups/{{ b.id }}/herstellen"
+                onsubmit="return confirm('Door deze back-up te herstellen worden de huidige gegevens overschreven. Weet je zeker dat je wilt doorgaan?')">
+            <button type="submit" class="btn btn-outline btn-sm">Herstellen</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">🗄️</div>
+    <p>Nog geen back-ups aangemaakt. Klik op "Nu back-up maken" om te beginnen.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

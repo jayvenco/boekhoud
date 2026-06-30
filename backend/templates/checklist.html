@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Controlechecklist{% endblock %}
+{% block page_title %}Controlechecklist{% endblock %}
+
+{% block topbar_actions %}
+{% if summary.total == 0 %}
+<form method="post" action="/checklist/standaard">
+  <button type="submit" class="btn btn-outline">Standaard items toevoegen</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:24px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <span class="section-title" style="margin-bottom:0;">Voortgang</span>
+    <span style="font-size:13px;color:var(--light-text);">
+      {{ summary.completed }} van de {{ summary.total }} taken voltooid ({{ summary.percentage }}%)
+    </span>
+  </div>
+  <div style="background:var(--stone);border-radius:4px;height:8px;">
+    <div style="background:var(--sage);height:8px;border-radius:4px;width:{{ summary.percentage }}%;transition:width .3s;"></div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start;">
+  <div>
+    {% if items %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th style="width:36px;"></th><th>Titel</th><th>Omschrijving</th><th>Aangemaakt</th><th>Voltooid op</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for i in items %}
+          <tr id="row-{{ i.id }}" style="{% if i.status == 'voltooid' %}opacity:0.6;{% endif %}">
+            <td>
+              <form method="post" action="/checklist/{{ i.id }}/toggle">
+                <input type="checkbox" onchange="this.form.submit()" {% if i.status == 'voltooid' %}checked{% endif %} title="Markeer als {% if i.status == 'voltooid' %}open{% else %}voltooid{% endif %}">
+              </form>
+            </td>
+            <td>
+              <span class="view-mode" id="title-view-{{ i.id }}" style="font-weight:500;color:var(--dark);{% if i.status == 'voltooid' %}text-decoration:line-through;{% endif %}">{{ i.title }}</span>
+              <input type="text" class="edit-mode" id="title-edit-{{ i.id }}" style="display:none;width:100%;" value="{{ i.title }}">
+            </td>
+            <td>
+              <span class="view-mode" id="desc-view-{{ i.id }}" style="color:var(--light-text);">{{ i.description or "—" }}</span>
+              <textarea class="edit-mode" id="desc-edit-{{ i.id }}" style="display:none;width:100%;min-height:50px;">{{ i.description or "" }}</textarea>
+            </td>
+            <td style="font-size:12.5px;color:var(--light-text);">{{ i.created_at.strftime("%d-%m-%Y") if i.created_at else "—" }}</td>
+            <td style="font-size:12.5px;color:var(--light-text);">{{ i.completed_at.strftime("%d-%m-%Y") if i.completed_at else "—" }}</td>
+            <td>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="btn btn-outline btn-xs view-mode" id="edit-btn-{{ i.id }}" onclick="startEdit({{ i.id }})">Bewerken</button>
+                <form method="post" action="/checklist/{{ i.id }}/bewerken" class="edit-mode" id="save-form-{{ i.id }}" style="display:none;">
+                  <input type="hidden" name="title" id="title-hidden-{{ i.id }}">
+                  <input type="hidden" name="description" id="desc-hidden-{{ i.id }}">
+                  <button type="submit" class="btn btn-primary btn-xs" onclick="prepareSave({{ i.id }})">Opslaan</button>
+                  <button type="button" class="btn btn-outline btn-xs" onclick="cancelEdit({{ i.id }})">Annuleren</button>
+                </form>
+                <form method="post" action="/checklist/{{ i.id }}/verwijderen" class="view-mode" id="delete-form-{{ i.id }}" onsubmit="return confirm('Checklist-item verwijderen?')">
+                  <button type="submit" class="btn btn-danger btn-xs">Verwijder</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="empty-state">
+        <div class="empty-state-icon">✅</div>
+        <p>Nog geen checklist-items.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;">Nieuw controlepunt</div>
+    <form method="post" action="/checklist/nieuw">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Titel *</label>
+        <input type="text" name="title" required placeholder="bijv. BTW-aangifte gecontroleerd">
+      </div>
+      <div class="form-group" style="margin-bottom:18px;">
+        <label>Omschrijving</label>
+        <textarea name="description" placeholder="Optionele toelichting…" style="min-height:70px;"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Toevoegen</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function startEdit(id) {
+  document.querySelectorAll(`#row-${id} .view-mode`).forEach(el => el.style.display = 'none');
+  document.querySelectorAll(`#row-${id} .edit-mode`).forEach(el => el.style.display = '');
+  document.getElementById(`title-edit-${id}`).style.display = 'block';
+  document.getElementById(`desc-edit-${id}`).style.display = 'block';
+  document.getElementById(`save-form-${id}`).style.display = 'flex';
+  document.getElementById(`save-form-${id}`).style.gap = '6px';
+}
+
+function cancelEdit(id) {
+  document.querySelectorAll(`#row-${id} .view-mode`).forEach(el => el.style.display = '');
+  document.querySelectorAll(`#row-${id} .edit-mode`).forEach(el => el.style.display = 'none');
+}
+
+function prepareSave(id) {
+  document.getElementById(`title-hidden-${id}`).value = document.getElementById(`title-edit-${id}`).value;
+  document.getElementById(`desc-hidden-${id}`).value = document.getElementById(`desc-edit-${id}`).value;
+}
+</script>
+{% endblock %}
