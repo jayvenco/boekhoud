@@ -42,3 +42,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Local AI assistant context (not for repo)
+CLAUDE.md
