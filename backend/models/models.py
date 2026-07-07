@@ -306,3 +306,11 @@ class InvoiceNumberingSettings(Base):
     format_template_income = Column(String(50), default="I-{year}-{number}")
     format_template_expense = Column(String(50), default="U-{year}-{number}")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class APISettings(Base):
+    __tablename__ = "api_settings"
+    id = Column(Integer, primary_key=True)
+    api_key = Column(String(100), nullable=True)
+    enabled = Column(Boolean, default=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -414,6 +414,50 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endif %}
 </script>
 
+<div id="api-instellingen" style="margin-top:20px;" class="card">
+  <div class="section-title" style="margin-bottom:16px;">API-toegang voor AI-agents</div>
+  <p style="font-size:13px;color:var(--light-text);margin-bottom:16px;">
+    Geef externe AI-agents toegang tot je boekhouding via de JSON API. Stuur de sleutel mee als HTTP-header: <code>X-API-Key: &lt;sleutel&gt;</code>.
+  </p>
+
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+    <form method="post" action="/instellingen/api/toggle" style="margin:0;">
+      <button type="submit" class="btn {% if api_settings and api_settings.enabled %}btn-primary{% else %}btn-outline{% endif %}" style="min-width:140px;">
+        {% if api_settings and api_settings.enabled %}API ingeschakeld{% else %}API uitgeschakeld{% endif %}
+      </button>
+    </form>
+    <form method="post" action="/instellingen/api/genereer" style="margin:0;">
+      <button type="submit" class="btn btn-outline">Genereer nieuwe sleutel</button>
+    </form>
+  </div>
+
+  {% if api_settings and api_settings.api_key %}
+  <div style="margin-bottom:12px;">
+    <label style="font-size:13px;color:var(--mid);display:block;margin-bottom:6px;">API-sleutel</label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="password" id="api-key-field" value="{{ api_settings.api_key }}" readonly
+             style="font-family:monospace;font-size:13px;flex:1;min-width:200px;background:var(--bg-alt);border:1px solid var(--border);border-radius:6px;padding:8px 12px;">
+      <button type="button" onclick="toggleApiKey()" class="btn btn-outline" style="min-width:80px;" id="api-key-toggle">Toon</button>
+      <button type="button" onclick="copyApiKey()" class="btn btn-outline" style="min-width:80px;" id="api-key-copy">Kopieer</button>
+    </div>
+  </div>
+  {% else %}
+  <p style="font-size:13px;color:var(--mid);">Nog geen sleutel gegenereerd. Klik op "Genereer nieuwe sleutel" om te beginnen.</p>
+  {% endif %}
+
+  <details style="margin-top:12px;">
+    <summary style="font-size:13px;color:var(--mid);cursor:pointer;">Beschikbare endpoints</summary>
+    <div style="margin-top:10px;font-size:12px;font-family:monospace;color:var(--light-text);line-height:1.8;">
+      GET  /api/v1/stats?jaar=2025<br>
+      GET  /api/v1/inkomsten?jaar=2025&amp;limit=100<br>
+      POST /api/v1/inkomsten<br>
+      GET  /api/v1/uitgaven?jaar=2025&amp;limit=100<br>
+      POST /api/v1/uitgaven<br>
+      GET  /api/v1/categorieen
+    </div>
+  </details>
+</div>
+
 <div style="margin-top:20px;" class="card">
   <div class="section-title" style="margin-bottom:12px;">Standaard inloggegevens</div>
   <p style="font-size:13px;color:var(--light-text);">
@@ -421,4 +465,26 @@ document.addEventListener('DOMContentLoaded', function() {
     <span style="color:var(--danger)">⚠️ Wijzig het wachtwoord direct na de eerste login!</span>
   </p>
 </div>
+
+<script>
+function toggleApiKey() {
+  const field = document.getElementById('api-key-field');
+  const btn = document.getElementById('api-key-toggle');
+  if (field.type === 'password') {
+    field.type = 'text';
+    btn.textContent = 'Verberg';
+  } else {
+    field.type = 'password';
+    btn.textContent = 'Toon';
+  }
+}
+function copyApiKey() {
+  const field = document.getElementById('api-key-field');
+  navigator.clipboard.writeText(field.value).then(() => {
+    const btn = document.getElementById('api-key-copy');
+    btn.textContent = 'Gekopieerd!';
+    setTimeout(() => { btn.textContent = 'Kopieer'; }, 2000);
+  });
+}
+</script>
 {% endblock %}

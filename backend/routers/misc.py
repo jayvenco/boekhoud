@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.database import get_db
 from backend.models.backup_database import get_backup_db
-from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense, IncomeCategory, InvoiceNumberingSettings
+from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense, IncomeCategory, InvoiceNumberingSettings, APISettings
 from backend.routers.auth import require_auth
 from backend.services.ocr import process_receipt
 from backend.services.files import save_receipts, UPLOAD_ROOT
@@ -367,6 +367,9 @@ async def settings_page(
     result = await db.execute(select(IncomeCategory).order_by(IncomeCategory.name))
     income_categories = result.scalars().all()
 
+    result = await db.execute(select(APISettings))
+    api_settings = result.scalar_one_or_none()
+
     return templates.TemplateResponse(request, "settings.html", {"user": user, "settings": settings,
         "backup_settings": backup_settings,
         "ai_settings": ai_settings,
@@ -375,6 +378,7 @@ async def settings_page(
         "ai_key_masks": ai_key_masks,
         "invoice_numbering_settings": invoice_numbering_settings,
         "income_categories": income_categories,
+        "api_settings": api_settings,
         "success": request.query_params.get("success"),
         "error": request.query_params.get("error"),
         "cat_error": request.query_params.get("cat_error"),
@@ -411,6 +415,37 @@ async def update_settings(
 
     await db.commit()
     return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
+@router.post("/instellingen/api/genereer")
+async def generate_api_key(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    import secrets
+    result = await db.execute(select(APISettings))
+    cfg = result.scalar_one_or_none()
+    if not cfg:
+        cfg = APISettings()
+        db.add(cfg)
+    cfg.api_key = secrets.token_urlsafe(32)
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1#api-instellingen", status_code=302)
+
+
+@router.post("/instellingen/api/toggle")
+async def toggle_api(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    result = await db.execute(select(APISettings))
+    cfg = result.scalar_one_or_none()
+    if not cfg:
+        cfg = APISettings()
+        db.add(cfg)
+    cfg.enabled = not cfg.enabled
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1#api-instellingen", status_code=302)
 
 
 @router.post("/instellingen/wachtwoord")

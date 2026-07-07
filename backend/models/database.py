@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from backend.models.models import Base, User, IncomeCategory, ExpenseCategory, CompanySettings, AISettings, InvoiceNumberingSettings, FiscalYear, YearClosure
+from backend.models.models import Base, User, IncomeCategory, ExpenseCategory, CompanySettings, AISettings, InvoiceNumberingSettings, FiscalYear, YearClosure, APISettings
 import bcrypt
 import os
 
@@ -152,6 +152,11 @@ async def init_db():
         result = await session.execute(select(InvoiceNumberingSettings))
         if not result.scalars().first():
             session.add(InvoiceNumberingSettings())
+
+        # Seed API settings
+        result = await session.execute(select(APISettings))
+        if not result.scalars().first():
+            session.add(APISettings(enabled=False))
 
         # Migreer bestaande year_closures naar fiscal_years
         closures = await session.execute(select(YearClosure))
