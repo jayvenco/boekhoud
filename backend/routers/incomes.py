@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Form, Depends, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
@@ -9,12 +9,14 @@ from backend.models.database import get_db
 from backend.models.models import Income, IncomeCategory, IncomeReceipt
 from backend.routers.auth import require_auth
 from backend.services.files import save_receipts, delete_file, move_tmp_to_category
-from backend.services.invoice_numbering import get_numbering_settings
+from backend.services.invoice_numbering import get_numbering_settings, get_next_invoice_number
 from backend.services.fiscal_year import is_year_locked, get_locked_years
 from backend.services.pdf_export import generate_incomes_pdf
 from backend.services.i18n import t
 from datetime import date, datetime
 from typing import Optional, List
+import csv
+import io
 
 router = APIRouter(prefix="/inkomsten")
 templates = Jinja2Templates(directory="backend/templates")
@@ -393,6 +395,170 @@ async def delete_receipt(id: int, receipt_id: int, request: Request, db: AsyncSe
         await db.delete(receipt)
         await db.commit()
     return RedirectResponse(f"/inkomsten/{id}/bewerken", status_code=302)
+
+
+@router.get("/import", response_class=HTMLResponse)
+async def import_form(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse(request, "incomes/import.html", {"user": user})
+
+
+@router.post("/import", response_class=HTMLResponse)
+async def import_incomes(
+    request: Request,
+    bestand: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    filename = (bestand.filename or "").lower()
+    if not (filename.endswith(".csv") or filename.endswith(".xlsx")):
+        return templates.TemplateResponse(request, "incomes/import.html", {
+            "user": user,
+            "fout": "Alleen CSV (.csv) en Excel (.xlsx) bestanden zijn toegestaan.",
+        })
+
+    content = await bestand.read()
+
+    # ── Parse rows ────────────────────────────────────────────
+    raw_rows: list[dict] = []
+    parse_error: str | None = None
+
+    if filename.endswith(".csv"):
+        try:
+            text = content.decode("utf-8-sig")  # strip BOM if present
+            reader = csv.DictReader(io.StringIO(text))
+            for row in reader:
+                raw_rows.append({k.strip().lower(): v.strip() for k, v in row.items()})
+        except Exception as e:
+            parse_error = f"CSV-leessfout: {e}"
+    else:
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+            ws = wb.active
+            headers = [str(c.value or "").strip().lower() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if all(v is None for v in row):
+                    continue
+                raw_rows.append({headers[i]: (str(v).strip() if v is not None else "") for i, v in enumerate(row)})
+        except Exception as e:
+            parse_error = f"Excel-leessfout: {e}"
+
+    if parse_error:
+        return templates.TemplateResponse(request, "incomes/import.html", {
+            "user": user, "fout": parse_error,
+        })
+
+    # ── Load categories (name → object, case-insensitive) ─────
+    cat_result = await db.execute(select(IncomeCategory))
+    cat_map = {c.name.lower(): c for c in cat_result.scalars().all()}
+
+    ns = await get_numbering_settings(db)
+    locked_years: set[int] = await get_locked_years(db)
+
+    imported, skipped = 0, []
+
+    for row_num, row in enumerate(raw_rows, start=2):
+        errors = []
+
+        # datum
+        raw_date = row.get("datum", "")
+        try:
+            record_date = parse_date(raw_date)
+        except ValueError:
+            errors.append(f"Ongeldige datum '{raw_date}'")
+            record_date = None
+
+        # bedrag
+        raw_amount = row.get("bedrag", "").replace(",", ".")
+        try:
+            amount = float(raw_amount)
+            if amount <= 0:
+                raise ValueError
+        except ValueError:
+            errors.append(f"Ongeldig bedrag '{row.get('bedrag', '')}'")
+            amount = None
+
+        # categorie
+        cat_name = row.get("categorie", "").lower()
+        cat = cat_map.get(cat_name)
+        if not cat:
+            errors.append(f"Categorie '{row.get('categorie', '')}' bestaat niet")
+
+        # boekjaar vergrendeld?
+        if record_date and record_date.year in locked_years:
+            errors.append(f"Boekjaar {record_date.year} is afgesloten")
+
+        if errors:
+            skipped.append({"rij": row_num, "reden": "; ".join(errors), "data": dict(row)})
+            continue
+
+        # factuurnummer
+        invoice_number = row.get("factuurnummer", "").strip()
+        if not invoice_number:
+            if ns.auto_enabled:
+                invoice_number = await get_next_invoice_number(db, record_date.year, "inkomsten", ns)
+            else:
+                skipped.append({"rij": row_num, "reden": "Geen factuurnummer opgegeven en auto-nummering is uitgeschakeld", "data": dict(row)})
+                continue
+
+        # duplicate check
+        dup = await db.execute(select(Income).where(Income.invoice_number == invoice_number))
+        if dup.scalar_one_or_none():
+            skipped.append({"rij": row_num, "reden": f"Factuurnummer '{invoice_number}' bestaat al", "data": dict(row)})
+            continue
+
+        # status + ontvangen_op
+        status_val = row.get("status", "niet_betaald").strip() or "niet_betaald"
+        if status_val not in ("betaald", "niet_betaald"):
+            status_val = "niet_betaald"
+
+        received_via = row.get("ontvangen_op", "zakelijke_rekening").strip() or "zakelijke_rekening"
+        if received_via not in RECEIVED_VIA_OPTIONS:
+            received_via = "zakelijke_rekening"
+
+        db.add(Income(
+            invoice_number=invoice_number,
+            category_id=cat.id,
+            date=record_date,
+            amount=amount,
+            description=row.get("omschrijving", "").strip() or None,
+            status=status_val,
+            received_via=received_via,
+        ))
+        imported += 1
+
+    await db.commit()
+
+    return templates.TemplateResponse(request, "incomes/import.html", {
+        "user": user,
+        "imported": imported,
+        "skipped": skipped,
+        "total": len(raw_rows),
+    })
+
+
+@router.get("/import/voorbeeld-csv")
+async def download_csv_example():
+    return FileResponse(
+        "backend/static/import_inkomsten_voorbeeld.csv",
+        media_type="text/csv",
+        filename="import_inkomsten_voorbeeld.csv",
+    )
+
+
+@router.get("/import/voorbeeld-xlsx")
+async def download_xlsx_example():
+    return FileResponse(
+        "backend/static/import_inkomsten_voorbeeld.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="import_inkomsten_voorbeeld.xlsx",
+    )
 
 
 @router.post("/{id}/verwijderen")

@@ -1,0 +1,6 @@
+datum,bedrag,categorie,factuurnummer,omschrijving,status,ontvangen_op
+2025-01-15,1250.00,Behandelingen,,Behandeling Jan Jansen,betaald,zakelijke_rekening
+2025-01-22,875.50,Behandelingen,,Behandeling Maria de Vries,niet_betaald,zakelijke_rekening
+2025-02-03,2100.00,Debiteuren,D-2025-001,Kwartaaldeclaratie Q4 2024,betaald,priverekening
+2025-02-14,450.00,Behandelingen,,Behandeling Peter Bakker,betaald,sumup
+2025-03-01,1800.00,Behandelingen,,Behandeling groepssessie maart,niet_betaald,zakelijke_rekening

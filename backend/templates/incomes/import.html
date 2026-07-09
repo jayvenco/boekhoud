@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Inkomsten importeren{% endblock %}
+{% block page_title %}Inkomsten importeren{% endblock %}
+
+{% block topbar_actions %}
+<a href="/inkomsten" class="btn btn-outline">← Terug</a>
+{% endblock %}
+
+{% block content %}
+
+{% if imported is defined %}
+<!-- Resultaat na import -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="section-title" style="margin-bottom:16px;">Importresultaat</div>
+  <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+    <div class="stat-card income">
+      <div class="stat-label">Geïmporteerd</div>
+      <div class="stat-value">{{ imported }}</div>
+    </div>
+    <div class="stat-card {% if skipped %}warning{% endif %}">
+      <div class="stat-label">Overgeslagen</div>
+      <div class="stat-value">{{ skipped|length }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Totaal rijen</div>
+      <div class="stat-value">{{ total }}</div>
+    </div>
+  </div>
+
+  {% if imported > 0 %}
+  <div class="alert alert-success" style="margin-bottom:16px;">
+    ✅ {{ imported }} inkomst{% if imported != 1 %}en{% endif %} succesvol geïmporteerd.
+  </div>
+  {% endif %}
+
+  {% if skipped %}
+  <div style="margin-bottom:12px;">
+    <div style="font-weight:600;font-size:13px;color:var(--danger);margin-bottom:10px;">
+      ⚠️ {{ skipped|length }} rij{% if skipped|length != 1 %}en{% endif %} overgeslagen
+    </div>
+    <table class="table" style="font-size:13px;">
+      <thead>
+        <tr>
+          <th style="width:60px;">Rij</th>
+          <th style="width:220px;">Reden</th>
+          <th>Gegevens</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in skipped %}
+        <tr>
+          <td>{{ s.rij }}</td>
+          <td style="color:var(--danger);">{{ s.reden }}</td>
+          <td style="font-family:monospace;font-size:11px;color:var(--mid);">
+            {% for k, v in s.data.items() %}{% if v %}{{ k }}={{ v }}  {% endif %}{% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;gap:10px;margin-top:16px;">
+    <a href="/inkomsten" class="btn btn-primary">Naar inkomsten →</a>
+    <a href="/inkomsten/import" class="btn btn-outline">Nog een bestand importeren</a>
+  </div>
+</div>
+
+{% else %}
+<!-- Upload formulier -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;">Bestand uploaden</div>
+    {% if fout %}
+    <div class="alert alert-error" style="margin-bottom:16px;">⚠️ {{ fout }}</div>
+    {% endif %}
+    <form method="post" action="/inkomsten/import" enctype="multipart/form-data">
+      <div class="form-group" style="margin-bottom:20px;">
+        <label>CSV of Excel bestand</label>
+        <input type="file" name="bestand" accept=".csv,.xlsx" required>
+        <div style="font-size:12px;color:var(--mid);margin-top:6px;">
+          Toegestane formaten: <strong>.csv</strong> en <strong>.xlsx</strong>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Importeren</button>
+    </form>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Voorbeeldbestanden downloaden</div>
+      <p style="font-size:13px;color:var(--light-text);margin-bottom:14px;">
+        Gebruik een van de voorbeeldbestanden als startpunt voor jouw import.
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="/inkomsten/import/voorbeeld-csv" class="btn btn-outline">↓ CSV voorbeeld</a>
+        <a href="/inkomsten/import/voorbeeld-xlsx" class="btn btn-outline">↓ Excel voorbeeld</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Kolommen</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--mid);">Kolom</th>
+            <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--mid);">Verplicht</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for col, req in [
+            ("datum", "Ja"), ("bedrag", "Ja"), ("categorie", "Ja"),
+            ("factuurnummer", "Nee"), ("omschrijving", "Nee"),
+            ("status", "Nee"), ("ontvangen_op", "Nee")
+          ] %}
+          <tr>
+            <td style="padding:5px 8px;font-family:monospace;color:var(--brand);">{{ col }}</td>
+            <td style="padding:5px 8px;color:{% if req == 'Ja' %}var(--danger){% else %}var(--mid){% endif %};">{{ req }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Toegestane waarden</div>
+      <div style="font-size:12px;color:var(--light-text);line-height:1.8;">
+        <strong>datum:</strong> YYYY-MM-DD of DD-MM-YYYY<br>
+        <strong>status:</strong> <code>betaald</code> | <code>niet_betaald</code><br>
+        <strong>ontvangen_op:</strong><br>
+        <code>zakelijke_rekening</code> · <code>priverekening</code> · <code>creditcard</code><br>
+        <code>rekening_partner</code> · <code>externe_praktijk</code> · <code>sumup</code><br>
+        <code>payt</code> · <code>infomedics</code> · <code>overig</code>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
+{% endblock %}
