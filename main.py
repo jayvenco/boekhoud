@@ -15,6 +15,7 @@ from backend.models.models import BackupSettings
 from backend.routers import auth, incomes, expenses, dashboard, misc, backups, ai_settings, checklist
 from backend.routers import fiscal_years
 from backend.routers import api as api_router
+from backend.routers import scan_queue as scan_queue_router
 from backend.middleware import SettingsMiddleware
 from backend.services.backup import configure_backup_job
 
@@ -29,6 +30,7 @@ for _d in [
     UPLOAD_DIR, DATA_DIR, BACKUP_DIR, LOG_DIR, pathlib.Path("backend/static"),
     UPLOAD_DIR / "uitgaven" / "apparatuur",
     UPLOAD_DIR / "uitgaven" / "overige",
+    UPLOAD_DIR / "scan_queue",
 ]:
     _d.mkdir(parents=True, exist_ok=True)
 
@@ -115,6 +117,7 @@ app.include_router(ai_settings.router)
 app.include_router(checklist.router)
 app.include_router(fiscal_years.router)
 app.include_router(api_router.router)
+app.include_router(scan_queue_router.router)
 
 
 @app.get("/manifest.json")

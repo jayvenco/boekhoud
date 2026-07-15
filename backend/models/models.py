@@ -314,3 +314,18 @@ class APISettings(Base):
     api_key = Column(String(100), nullable=True)
     enabled = Column(Boolean, default=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ScanQueue(Base):
+    __tablename__ = "scan_queue"
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(255), nullable=False)
+    original_filename = Column(String(255), nullable=True)
+    transaction_type = Column(String(20), nullable=False)  # "inkomst" or "uitgave"
+    ocr_date = Column(String(20), nullable=True)
+    ocr_amount = Column(Float, nullable=True)
+    ocr_description = Column(Text, nullable=True)
+    ocr_invoice_number = Column(String(100), nullable=True)
+    ocr_category_suggestion = Column(String(200), nullable=True)
+    ocr_error = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

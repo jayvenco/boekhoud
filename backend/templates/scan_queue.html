@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Scan-wachtrij{% endblock %}
+{% block page_title %}Scan-wachtrij{% endblock %}
+
+{% block topbar_actions %}
+{% if items %}
+<form method="post" action="/scan-wachtrij/bulk-afwijzen" style="margin:0;"
+      onsubmit="return confirm('Alle items verwijderen uit de wachtrij?')">
+  <button type="submit" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);">
+    ✕ Alles verwijderen
+  </button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% if uploaded %}
+<div class="alert alert-success" style="margin-bottom:16px;">
+  ✅ {{ uploaded }} bestand{% if uploaded|int != 1 %}en{% endif %} geüpload en gescand. Controleer de resultaten hieronder.
+</div>
+{% endif %}
+{% if error == "vergrendeld" %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Boekjaar is afgesloten — kies een andere datum.</div>
+{% elif error %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Controleer de ingevulde gegevens ({{ error }}).</div>
+{% endif %}
+
+<!-- Upload sectie -->
+<div class="card" style="margin-bottom:24px;">
+  <div class="section-title" style="margin-bottom:16px;">Bestanden uploaden & inscannen</div>
+  <form method="post" action="/scan-wachtrij/upload" enctype="multipart/form-data">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;">
+      <div class="form-group" style="margin:0;">
+        <label>Afbeeldingen / PDF's</label>
+        <input type="file" name="bestanden" multiple accept=".jpg,.jpeg,.png,.pdf" required>
+        <div style="font-size:12px;color:var(--mid);margin-top:4px;">Meerdere bestanden tegelijk selecteren is mogelijk</div>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Type transactie</label>
+        <select name="transaction_type" required>
+          <option value="uitgave">Uitgave (bon / factuur)</option>
+          <option value="inkomst">Inkomst (betaalbewijs / factuur)</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <button type="submit" class="btn btn-primary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Uploaden &amp; AI-scan starten
+      </button>
+    </div>
+  </form>
+</div>
+
+{% if not items %}
+<div class="card" style="text-align:center;padding:48px 24px;color:var(--mid);">
+  <div style="font-size:32px;margin-bottom:12px;">📭</div>
+  <div style="font-weight:600;margin-bottom:6px;">Wachtrij is leeg</div>
+  <div style="font-size:13px;">Upload bestanden hierboven om ze te laten inscannen door AI.</div>
+</div>
+{% else %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+  <div style="font-weight:600;color:var(--dark);">{{ items|length }} item{% if items|length != 1 %}s{% endif %} te controleren</div>
+</div>
+
+{% for item in items %}
+<div class="card" style="margin-bottom:20px;" id="item-{{ item.id }}">
+  <div style="display:grid;grid-template-columns:200px 1fr;gap:20px;align-items:start;">
+
+    <!-- Afbeelding preview -->
+    <div>
+      {% set ext = item.filename.rsplit('.', 1)[-1].lower() %}
+      {% if ext in ['jpg','jpeg','png'] %}
+      <img src="/uploads/scan_queue/{{ item.filename }}"
+           style="width:100%;border-radius:8px;border:1px solid var(--border);object-fit:cover;max-height:240px;"
+           alt="{{ item.original_filename }}">
+      {% else %}
+      <div style="width:100%;height:120px;border-radius:8px;border:1px solid var(--border);
+                  display:flex;align-items:center;justify-content:center;
+                  background:var(--bg-alt);flex-direction:column;gap:6px;">
+        <span style="font-size:32px;">📄</span>
+        <span style="font-size:11px;color:var(--mid);">PDF</span>
+      </div>
+      {% endif %}
+      <div style="font-size:11px;color:var(--mid);margin-top:6px;word-break:break-all;">
+        {{ item.original_filename }}
+      </div>
+      <div style="font-size:11px;color:var(--mid);">
+        {{ item.created_at.strftime('%d-%m-%Y %H:%M') if item.created_at else '' }}
+      </div>
+      {% if item.ocr_error %}
+      <div style="margin-top:8px;font-size:11px;color:var(--danger);background:var(--danger-lite, #FDF0F0);
+                  border:1px solid var(--danger);border-radius:4px;padding:6px 8px;">
+        ⚠️ {{ item.ocr_error }}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Formulier -->
+    <form method="post" action="/scan-wachtrij/{{ item.id }}/goedkeuren">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-weight:600;font-size:14px;color:var(--dark);">Controleer &amp; goedkeuren</div>
+        <div style="display:flex;gap:8px;">
+          <button type="submit" class="btn btn-primary btn-sm">✓ Goedkeuren</button>
+          <button type="button" onclick="rejectItem({{ item.id }})" class="btn btn-outline btn-sm"
+                  style="color:var(--danger);border-color:var(--danger);">✕ Verwijderen</button>
+        </div>
+      </div>
+
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+
+        <div class="form-group" style="margin:0;">
+          <label>Type</label>
+          <select name="transaction_type" id="type-{{ item.id }}"
+                  onchange="switchCats({{ item.id }}, this.value)">
+            <option value="uitgave" {% if item.transaction_type == 'uitgave' %}selected{% endif %}>Uitgave</option>
+            <option value="inkomst" {% if item.transaction_type == 'inkomst' %}selected{% endif %}>Inkomst</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin:0;">
+          <label>Datum</label>
+          <input type="date" name="datum" required
+                 value="{{ item.ocr_date | replace('-', '-') if item.ocr_date else '' }}"
+                 placeholder="YYYY-MM-DD">
+        </div>
+
+        <div class="form-group" style="margin:0;">
+          <label>Bedrag (€)</label>
+          <input type="text" name="bedrag" required
+                 value="{{ '%.2f'|format(item.ocr_amount) if item.ocr_amount else '' }}"
+                 placeholder="0.00">
+        </div>
+
+        <div class="form-group" style="margin:0;">
+          <label>Factuurnummer</label>
+          <input type="text" name="factuurnummer"
+                 value="{{ item.ocr_invoice_number or '' }}"
+                 placeholder="Automatisch">
+        </div>
+
+        <!-- Inkomsten categorie -->
+        <div class="form-group" style="margin:0;" id="inc-cat-{{ item.id }}"
+             {% if item.transaction_type != 'inkomst' %}style="display:none;margin:0;"{% endif %}>
+          <label>Categorie (inkomst)</label>
+          <select name="category_id_inc" id="inc-cat-sel-{{ item.id }}">
+            {% for cat in inc_cats %}
+            <option value="{{ cat.id }}"
+              {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() in cat.slug %}selected{% endif %}>
+              {{ cat.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Uitgaven categorie -->
+        <div class="form-group" style="margin:0;" id="exp-cat-{{ item.id }}"
+             {% if item.transaction_type != 'uitgave' %}style="display:none;margin:0;"{% endif %}>
+          <label>Categorie (uitgave)</label>
+          <select name="category_id_exp" id="exp-cat-sel-{{ item.id }}">
+            {% for cat in exp_cats %}
+            <option value="{{ cat.id }}"
+              {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() in cat.slug %}selected{% endif %}>
+              {{ cat.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Ontvangen op (alleen inkomsten) -->
+        <div class="form-group" style="margin:0;" id="via-{{ item.id }}"
+             {% if item.transaction_type != 'inkomst' %}style="display:none;margin:0;"{% endif %}>
+          <label>Ontvangen op</label>
+          <select name="received_via" id="via-sel-{{ item.id }}">
+            {% for key, label in received_via_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+      </div>
+
+      <!-- Omschrijving (hidden field) — submit correct category_id based on type -->
+      <div style="margin-top:12px;">
+        <label style="font-size:13px;color:var(--mid);">Omschrijving</label>
+        <input type="text" name="omschrijving"
+               value="{{ item.ocr_description or '' }}"
+               placeholder="Optioneel"
+               style="margin-top:4px;">
+      </div>
+
+      <!-- Hidden: resolved category_id — filled by JS on submit -->
+      <input type="hidden" name="category_id" id="cat-id-{{ item.id }}" value="">
+
+    </form>
+
+    <!-- Hidden reject form -->
+    <form id="reject-form-{{ item.id }}" method="post"
+          action="/scan-wachtrij/{{ item.id }}/afwijzen" style="display:none;"></form>
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
+<script>
+function switchCats(id, type) {
+  const incDiv = document.getElementById('inc-cat-' + id);
+  const expDiv = document.getElementById('exp-cat-' + id);
+  const viaDiv = document.getElementById('via-' + id);
+  if (type === 'inkomst') {
+    incDiv.style.display = '';
+    expDiv.style.display = 'none';
+    if (viaDiv) viaDiv.style.display = '';
+  } else {
+    incDiv.style.display = 'none';
+    expDiv.style.display = '';
+    if (viaDiv) viaDiv.style.display = 'none';
+  }
+}
+
+function rejectItem(id) {
+  if (confirm('Dit item verwijderen uit de wachtrij?')) {
+    document.getElementById('reject-form-' + id).submit();
+  }
+}
+
+// Vóór submit: zet category_id op de juiste waarde (inc of exp)
+document.querySelectorAll('form[action*="/goedkeuren"]').forEach(form => {
+  form.addEventListener('submit', function() {
+    const id = this.action.match(/\/(\d+)\/goedkeuren/)[1];
+    const type = document.getElementById('type-' + id).value;
+    const catField = document.getElementById('cat-id-' + id);
+    if (type === 'inkomst') {
+      catField.value = document.getElementById('inc-cat-sel-' + id).value;
+    } else {
+      catField.value = document.getElementById('exp-cat-sel-' + id).value;
+    }
+  });
+});
+
+// Init: correcte zichtbaarheid per item
+document.querySelectorAll('[id^="type-"]').forEach(sel => {
+  const id = sel.id.replace('type-', '');
+  switchCats(id, sel.value);
+});
+</script>
+
+{% endblock %}
