@@ -67,7 +67,7 @@ class OpenAIProvider(AIProvider):
                 json={
                     "model": model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 500,
+                    "max_completion_tokens": 500,
                     "temperature": 0,
                     "response_format": {"type": "json_object"},
                 },
