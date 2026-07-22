@@ -60,19 +60,30 @@ class OpenAIProvider(AIProvider):
             return "onbereikbaar", "Provider niet bereikbaar"
 
     async def complete(self, api_key: str, model: str, prompt: str) -> str:
+        # Reasoning models (o1, o3, o4-mini) don't support temperature or response_format.
+        # GPT-4.1 / GPT-5 series dropped response_format=json_object in favour of json_schema.
+        # Safest: omit both and rely on the prompt to request JSON output.
+        is_reasoning = any(model.startswith(p) for p in ("o1", "o3", "o4"))
+        payload: dict = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_completion_tokens": 500,
+        }
+        if not is_reasoning:
+            payload["temperature"] = 0
+
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_completion_tokens": 500,
-                    "temperature": 0,
-                    "response_format": {"type": "json_object"},
-                },
+                json=payload,
             )
-            resp.raise_for_status()
+            if not resp.is_success:
+                raise httpx.HTTPStatusError(
+                    f"HTTP {resp.status_code}: {resp.text[:300]}",
+                    request=resp.request,
+                    response=resp,
+                )
             data = resp.json()
             return data["choices"][0]["message"]["content"]
 

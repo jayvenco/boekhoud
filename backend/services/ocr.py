@@ -142,8 +142,9 @@ async def analyze_with_configured_provider(db, text: str) -> dict:
         content = await provider.complete(api_key, model, EXTRACTION_PROMPT.format(text=text[:3000]))
         return json.loads(clean_json(content))
     except Exception as e:
-        logger.error(f"AI-aanvraag mislukt voor provider {settings.provider}: {type(e).__name__}")
-        return {"_ai_error": f"AI-aanvraag mislukt ({type(e).__name__}). Controleer de AI-instellingen."}
+        detail = str(e)[:200]
+        logger.error(f"AI-aanvraag mislukt voor provider {settings.provider}: {type(e).__name__}: {detail}")
+        return {"_ai_error": f"AI-aanvraag mislukt ({type(e).__name__}): {detail}"}
 
 
 async def process_receipt(file_path: str, db=None) -> dict:
