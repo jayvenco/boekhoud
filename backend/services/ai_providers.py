@@ -36,10 +36,13 @@ class OpenAIProvider(AIProvider):
     id = "openai"
     name = "OpenAI (ChatGPT)"
     models = [
-        AIModel("gpt-5", "GPT-5"),
-        AIModel("gpt-5-mini", "GPT-5 Mini"),
+        AIModel("gpt-4.1-mini", "GPT-4.1 Mini (aanbevolen)"),
         AIModel("gpt-4.1", "GPT-4.1"),
-        AIModel("gpt-4.1-mini", "GPT-4.1 Mini"),
+        AIModel("gpt-4.1-nano", "GPT-4.1 Nano"),
+        AIModel("gpt-4o", "GPT-4o"),
+        AIModel("gpt-4o-mini", "GPT-4o Mini"),
+        AIModel("o4-mini", "o4 Mini"),
+        AIModel("o3", "o3"),
     ]
 
     async def test_connection(self, api_key: str) -> Tuple[str, str]:
