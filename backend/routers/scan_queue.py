@@ -33,6 +33,21 @@ def _scan_path(filename: str) -> Path:
     return SCAN_DIR / filename
 
 
+def _build_description(invoice_number, date_str, amount, ai_description=None) -> str:
+    """Standaard omschrijving: origineel factuurnummer, datum en bedrag,
+    optioneel gevolgd door de door AI herkende omschrijving."""
+    parts = []
+    if invoice_number:
+        parts.append(f"Factuurnr.: {invoice_number}")
+    if date_str:
+        parts.append(f"Datum: {date_str}")
+    if amount is not None:
+        parts.append(f"Bedrag: € {amount:.2f}")
+    if ai_description:
+        parts.append(str(ai_description))
+    return " | ".join(parts)
+
+
 # ── Overzicht + upload formulier ─────────────────────────────
 
 @router.get("", response_class=HTMLResponse)
@@ -44,6 +59,12 @@ async def scan_overview(request: Request, db: AsyncSession = Depends(get_db)):
     items = (await db.execute(
         select(ScanQueue).order_by(ScanQueue.created_at.desc())
     )).scalars().all()
+
+    # Standaard omschrijving samenstellen uit origineel factuurnr., datum en bedrag.
+    for it in items:
+        it.default_description = _build_description(
+            it.ocr_invoice_number, it.ocr_date, it.ocr_amount, it.ocr_description
+        )
 
     inc_cats = (await db.execute(select(IncomeCategory).order_by(IncomeCategory.name))).scalars().all()
     exp_cats = (await db.execute(select(ExpenseCategory).order_by(ExpenseCategory.name))).scalars().all()

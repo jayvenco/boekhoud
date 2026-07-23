@@ -271,18 +271,23 @@ async function runOcr() {
     if (data.error) { status.textContent = '⚠️ ' + data.error; return; }
     let filled = [];
     if (data.invoice_number) {
-      // Origineel (leverancier)nummer bewaren; ons eigen factuurnummer wordt
+      // Origineel factuurnummer bewaren; ons eigen factuurnummer wordt
       // automatisch genummerd op basis van het jaartal.
       document.getElementById('supplier_invoice_number').value = data.invoice_number;
       filled.push('factuurnummer origineel');
     }
     if (data.date) {
       fillDatePicker(data.date);
-      autoInvoiceNumber(document.getElementById('date').value);
       filled.push('datum');
     }
     if (data.amount) { document.getElementById('amount').value = data.amount; filled.push('bedrag'); }
-    if (data.description) { document.getElementById('description').value = data.description; filled.push('omschrijving'); }
+    // Altijd ons eigen factuurnummer volgens de naming-conventie toekennen
+    // (op basis van het herkende jaartal, of het huidige jaar als er geen datum is).
+    autoInvoiceNumber(document.getElementById('date').value);
+    // Omschrijving standaard samenstellen: origineel factuurnr., datum en bedrag.
+    document.getElementById('description').value = buildDescription(data);
+    filled.push('omschrijving');
+    updateDepPreview();
     if (data._tmp_file) {
       document.getElementById('ocr_tmp_file').value = data._tmp_file;
       // Show that bon is ready
@@ -333,12 +338,22 @@ function updateInvoiceNumberBadge() {
   badge.style.display = invField.dataset.autoFilled === 'true' ? 'inline-block' : 'none';
 }
 
+// Stelt de standaard omschrijving samen uit origineel factuurnummer, datum en bedrag.
+function buildDescription(data) {
+  const parts = [];
+  if (data.invoice_number) parts.push('Factuurnr.: ' + data.invoice_number);
+  if (data.date)           parts.push('Datum: ' + data.date);
+  if (data.amount)         parts.push('Bedrag: € ' + Number(data.amount).toFixed(2));
+  if (data.description)    parts.push(data.description);
+  return parts.join(' | ');
+}
+
 function autoInvoiceNumber(dateVal) {
-  if (!dateVal || !AUTO_NUMBERING_ENABLED) return;
+  if (!AUTO_NUMBERING_ENABLED) return;
   const invField = document.getElementById('invoice_number');
   // Only auto-fill if field is empty or was auto-filled before
   if (invField.dataset.autoFilled === 'false' && invField.value) return;
-  const year = dateVal.split('-')[0];
+  const year = (dateVal && dateVal.split('-')[0]) || String(new Date().getFullYear());
   fetch(`/api/volgend-factuurnummer?jaar=${year}&type=uitgaven`)
     .then(r => r.json())
     .then(data => {

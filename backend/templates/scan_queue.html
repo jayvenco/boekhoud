@@ -195,7 +195,7 @@
       <div style="margin-top:12px;">
         <label style="font-size:13px;color:var(--mid);">Omschrijving</label>
         <input type="text" name="omschrijving"
-               value="{{ item.ocr_description or '' }}"
+               value="{{ item.default_description or item.ocr_description or '' }}"
                placeholder="Optioneel"
                style="margin-top:4px;">
       </div>
