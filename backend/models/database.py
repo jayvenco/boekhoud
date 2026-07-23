@@ -71,6 +71,16 @@ async def init_db():
             except Exception:
                 pass
 
+        # Origineel factuurnummer van de leverancier/bon (naast onze eigen nummering).
+        for ddl in [
+            "ALTER TABLE incomes ADD COLUMN supplier_invoice_number VARCHAR(100)",
+            "ALTER TABLE expenses ADD COLUMN supplier_invoice_number VARCHAR(100)",
+        ]:
+            try:
+                await conn.exec_driver_sql(ddl)
+            except Exception:
+                pass
+
         # fiscal_years & fiscal_year_audit_logs worden automatisch aangemaakt via create_all.
         # Geen extra ALTER TABLE nodig; dit zijn nieuwe tabellen.
 

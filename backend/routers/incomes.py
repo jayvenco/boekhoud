@@ -192,6 +192,7 @@ async def new_income_form(request: Request, db: AsyncSession = Depends(get_db)):
 async def create_income(
     request: Request,
     invoice_number: str = Form(...),
+    supplier_invoice_number: str = Form(""),
     category_id: int = Form(...),
     date_str: str = Form(..., alias="date"),
     amount: float = Form(...),
@@ -248,7 +249,9 @@ async def create_income(
 
     receipt_path = saved[0]["path"] if saved else None
     income = Income(
-        invoice_number=invoice_number, category_id=category_id,
+        invoice_number=invoice_number,
+        supplier_invoice_number=supplier_invoice_number.strip() or None,
+        category_id=category_id,
         date=parse_date(date_str), amount=amount, description=description,
         status=status, received_via=received_via, received_via_other=received_via_other,
         receipt_path=receipt_path
@@ -295,6 +298,7 @@ async def edit_income_form(id: int, request: Request, db: AsyncSession = Depends
 async def update_income(
     id: int, request: Request,
     invoice_number: str = Form(...),
+    supplier_invoice_number: str = Form(""),
     category_id: int = Form(...),
     date_str: str = Form(..., alias="date"),
     amount: float = Form(...),
@@ -360,6 +364,7 @@ async def update_income(
             income.receipt_path = new_saved[0]["path"]
 
     income.invoice_number = invoice_number
+    income.supplier_invoice_number = supplier_invoice_number.strip() or None
     income.category_id = category_id
     income.date = parse_date(date_str)
     income.amount = amount

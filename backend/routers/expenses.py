@@ -244,6 +244,7 @@ async def new_expense_form(request: Request, db: AsyncSession = Depends(get_db))
 async def create_expense(
     request: Request,
     invoice_number: str = Form(...),
+    supplier_invoice_number: str = Form(""),
     category_id: int = Form(...),
     date_str: str = Form(..., alias="date"),
     amount: float = Form(...),
@@ -306,7 +307,9 @@ async def create_expense(
     rec_end = parse_date(recurring_end_date) if recurring and recurring_end_date else None
 
     expense = Expense(
-        invoice_number=invoice_number, category_id=category_id,
+        invoice_number=invoice_number,
+        supplier_invoice_number=supplier_invoice_number.strip() or None,
+        category_id=category_id,
         date=parse_date(date_str), amount=amount, description=description,
         receipt_path=receipt_path, is_depreciable=depreciable,
         is_recurring=recurring,
@@ -391,6 +394,7 @@ async def edit_expense_form(id: int, request: Request, db: AsyncSession = Depend
 async def update_expense(
     id: int, request: Request,
     invoice_number: str = Form(...),
+    supplier_invoice_number: str = Form(""),
     category_id: int = Form(...),
     date_str: str = Form(..., alias="date"),
     amount: float = Form(...),
@@ -460,6 +464,7 @@ async def update_expense(
     annual_amount = round((amount - residual_value) / duration, 2)
 
     expense.invoice_number = invoice_number
+    expense.supplier_invoice_number = supplier_invoice_number.strip() or None
     expense.category_id = category_id
     expense.date = parse_date(date_str)
     expense.amount = amount

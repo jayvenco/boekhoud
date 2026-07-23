@@ -39,6 +39,12 @@
                value="{{ income.invoice_number if income else '' }}" placeholder="bijv. 2026-001">
       </div>
       <div class="form-group">
+        <label for="supplier_invoice_number">Factuur nummer leverancier</label>
+        <input type="text" id="supplier_invoice_number" name="supplier_invoice_number"
+               value="{{ income.supplier_invoice_number if income and income.supplier_invoice_number else '' }}"
+               placeholder="Origineel nummer op de bon">
+      </div>
+      <div class="form-group">
         <label for="category_id">Categorie *</label>
         <select id="category_id" name="category_id" required>
           {% for cat in categories %}
@@ -150,11 +156,10 @@ async function runOcr() {
     if (data.error) { status.textContent = '⚠️ ' + data.error; return; }
     let filled = [];
     if (data.invoice_number) {
-      const invField = document.getElementById('invoice_number');
-      invField.value = data.invoice_number;
-      invField.dataset.autoFilled = 'false';
-      updateInvoiceNumberBadge();
-      filled.push('factuurnummer');
+      // Origineel (leverancier)nummer bewaren; ons eigen factuurnummer wordt
+      // automatisch genummerd op basis van het jaartal.
+      document.getElementById('supplier_invoice_number').value = data.invoice_number;
+      filled.push('factuur nr. leverancier');
     }
     if (data.date) {
       fillDatePicker(data.date);

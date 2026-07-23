@@ -47,6 +47,7 @@ async def scan_overview(request: Request, db: AsyncSession = Depends(get_db)):
 
     inc_cats = (await db.execute(select(IncomeCategory).order_by(IncomeCategory.name))).scalars().all()
     exp_cats = (await db.execute(select(ExpenseCategory).order_by(ExpenseCategory.name))).scalars().all()
+    numbering_settings = await get_numbering_settings(db)
 
     return templates.TemplateResponse(request, "scan_queue.html", {
         "user": user,
@@ -54,6 +55,7 @@ async def scan_overview(request: Request, db: AsyncSession = Depends(get_db)):
         "inc_cats": inc_cats,
         "exp_cats": exp_cats,
         "received_via_options": RECEIVED_VIA_OPTIONS,
+        "auto_numbering_enabled": numbering_settings.auto_enabled,
         "uploaded": request.query_params.get("uploaded"),
         "error": request.query_params.get("error"),
     })
@@ -125,6 +127,7 @@ async def approve_item(
     category_id: int = Form(...),
     omschrijving: str = Form(""),
     factuurnummer: str = Form(""),
+    factuurnummer_leverancier: str = Form(""),
     received_via: str = Form("zakelijke_rekening"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -165,6 +168,7 @@ async def approve_item(
             return RedirectResponse("/scan-wachtrij?error=factuurnummer", status_code=302)
 
     description = omschrijving.strip() or None
+    supplier_invoice = factuurnummer_leverancier.strip() or None
 
     if transaction_type == "inkomst":
         cat = await db.get(IncomeCategory, category_id)
@@ -173,6 +177,7 @@ async def approve_item(
 
         rec = Income(
             invoice_number=invoice_number,
+            supplier_invoice_number=supplier_invoice,
             category_id=category_id,
             date=record_date,
             amount=amount,
@@ -194,6 +199,7 @@ async def approve_item(
 
         rec = Expense(
             invoice_number=invoice_number,
+            supplier_invoice_number=supplier_invoice,
             category_id=category_id,
             date=record_date,
             amount=amount,

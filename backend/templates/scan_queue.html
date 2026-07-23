@@ -114,7 +114,7 @@
         <div class="form-group" style="margin:0;">
           <label>Type</label>
           <select name="transaction_type" id="type-{{ item.id }}"
-                  onchange="switchCats({{ item.id }}, this.value)">
+                  onchange="switchCats({{ item.id }}, this.value); autoInvoiceNumberScan({{ item.id }})">
             <option value="uitgave" {% if item.transaction_type == 'uitgave' %}selected{% endif %}>Uitgave</option>
             <option value="inkomst" {% if item.transaction_type == 'inkomst' %}selected{% endif %}>Inkomst</option>
           </select>
@@ -122,8 +122,9 @@
 
         <div class="form-group" style="margin:0;">
           <label>Datum</label>
-          <input type="date" name="datum" required
+          <input type="date" name="datum" id="datum-{{ item.id }}" required
                  value="{{ item.ocr_date | replace('-', '-') if item.ocr_date else '' }}"
+                 onchange="autoInvoiceNumberScan({{ item.id }})"
                  placeholder="YYYY-MM-DD">
         </div>
 
@@ -135,10 +136,18 @@
         </div>
 
         <div class="form-group" style="margin:0;">
-          <label>Factuurnummer</label>
-          <input type="text" name="factuurnummer"
+          <label for="factuurnummer-{{ item.id }}">Factuurnummer
+            <span id="factuurnummer-badge-{{ item.id }}" class="badge badge-neutral" style="display:none;font-weight:400;">Automatisch</span>
+          </label>
+          <input type="text" name="factuurnummer" id="factuurnummer-{{ item.id }}"
+                 value="" placeholder="Automatisch op jaartal">
+        </div>
+
+        <div class="form-group" style="margin:0;">
+          <label for="leverancier-{{ item.id }}">Factuur nummer leverancier</label>
+          <input type="text" name="factuurnummer_leverancier" id="leverancier-{{ item.id }}"
                  value="{{ item.ocr_invoice_number or '' }}"
-                 placeholder="Automatisch">
+                 placeholder="Origineel nummer op de bon">
         </div>
 
         <!-- Inkomsten categorie -->
@@ -206,6 +215,36 @@
 {% endif %}
 
 <script>
+const AUTO_NUMBERING_ENABLED = {{ auto_numbering_enabled | tojson }};
+
+function updateFactuurnummerBadge(id) {
+  const invField = document.getElementById('factuurnummer-' + id);
+  const badge = document.getElementById('factuurnummer-badge-' + id);
+  if (!invField || !badge) return;
+  badge.style.display = invField.dataset.autoFilled === 'true' ? 'inline-block' : 'none';
+}
+
+function autoInvoiceNumberScan(id) {
+  if (!AUTO_NUMBERING_ENABLED) return;
+  const datumField = document.getElementById('datum-' + id);
+  const invField = document.getElementById('factuurnummer-' + id);
+  const typeSel = document.getElementById('type-' + id);
+  if (!datumField || !invField || !typeSel || !datumField.value) return;
+  // Niet overschrijven als het veld handmatig is aangepast en een waarde heeft
+  if (invField.dataset.autoFilled === 'false' && invField.value) return;
+  const year = datumField.value.split('-')[0];
+  const apiType = typeSel.value === 'inkomst' ? 'inkomsten' : 'uitgaven';
+  fetch(`/api/volgend-factuurnummer?jaar=${year}&type=${apiType}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.invoice_number) return;
+      invField.value = data.invoice_number;
+      invField.dataset.autoFilled = 'true';
+      updateFactuurnummerBadge(id);
+    })
+    .catch(() => {});
+}
+
 function switchCats(id, type) {
   const incDiv = document.getElementById('inc-cat-' + id);
   const expDiv = document.getElementById('exp-cat-' + id);
@@ -245,6 +284,18 @@ document.querySelectorAll('form[action*="/goedkeuren"]').forEach(form => {
 document.querySelectorAll('[id^="type-"]').forEach(sel => {
   const id = sel.id.replace('type-', '');
   switchCats(id, sel.value);
+});
+
+// Init: factuurnummer markeren als handmatig zodra de gebruiker typt, en direct
+// het eerst volgende beschikbare nummer berekenen op basis van het ingescande jaartal.
+document.querySelectorAll('[id^="factuurnummer-"]:not([id^="factuurnummer-badge-"])').forEach(field => {
+  const id = field.id.replace('factuurnummer-', '');
+  field.dataset.autoFilled = 'true';
+  field.addEventListener('input', function() {
+    this.dataset.autoFilled = 'false';
+    updateFactuurnummerBadge(id);
+  });
+  autoInvoiceNumberScan(id);
 });
 </script>
 

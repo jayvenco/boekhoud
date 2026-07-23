@@ -119,6 +119,7 @@ class Income(Base):
     __tablename__ = "incomes"
     id = Column(Integer, primary_key=True)
     invoice_number = Column(String(100), nullable=False, unique=True)
+    supplier_invoice_number = Column(String(100), nullable=True)  # origineel nummer van leverancier/bon
     category_id = Column(Integer, ForeignKey("income_categories.id"), nullable=False)
     date = Column(Date, nullable=False)
     amount = Column(Float, nullable=False)
@@ -144,6 +145,7 @@ class Expense(Base):
     __tablename__ = "expenses"
     id = Column(Integer, primary_key=True)
     invoice_number = Column(String(100), nullable=False, unique=True)
+    supplier_invoice_number = Column(String(100), nullable=True)  # origineel nummer van leverancier/bon
     category_id = Column(Integer, ForeignKey("expense_categories.id"), nullable=False)
     date = Column(Date, nullable=False)
     amount = Column(Float, nullable=False)
