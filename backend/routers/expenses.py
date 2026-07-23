@@ -332,7 +332,8 @@ async def create_expense(
 
     # Save all receipt files to receipt table
     for r in saved:
-        db.add(ExpenseReceipt(expense_id=expense.id, file_path=r["path"], suffix=r["suffix"]))
+        db.add(ExpenseReceipt(expense_id=expense.id, file_path=r["path"], suffix=r["suffix"],
+                              file_hash=r.get("file_hash")))
 
     if recurring:
         await generate_recurring_occurrences(db, expense)
@@ -453,7 +454,8 @@ async def update_expense(
     if valid_files:
         new_saved = await save_receipts(valid_files, "uitgaven", cat.slug, invoice_number)
         for r in new_saved:
-            db.add(ExpenseReceipt(expense_id=expense.id, file_path=r["path"], suffix=r["suffix"]))
+            db.add(ExpenseReceipt(expense_id=expense.id, file_path=r["path"], suffix=r["suffix"],
+                                  file_hash=r.get("file_hash")))
         if not expense.receipt_path and new_saved:
             expense.receipt_path = new_saved[0]["path"]
 

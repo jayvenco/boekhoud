@@ -205,6 +205,12 @@ async function runOcr() {
     } else {
       status.textContent = '⚠️ Geen gegevens herkend (tekst wel uitgelezen). Controleer of een AI-provider is ingesteld bij Instellingen, of vul handmatig in.';
     }
+    if (data._duplicate_warning) {
+      const dup = document.createElement('div');
+      dup.style = 'margin-top:8px;color:#7A5C1E;background:#FDF6E3;border:1px solid #C89B3C;border-radius:4px;padding:6px 8px;';
+      dup.textContent = '⚠️ Mogelijk duplicaat: ' + data._duplicate_warning;
+      status.appendChild(dup);
+    }
   } catch(e) {
     status.textContent = '⚠️ Fout: ' + e.message;
   } finally {

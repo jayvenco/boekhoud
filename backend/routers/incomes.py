@@ -268,7 +268,8 @@ async def create_income(
             "error": f"Factuurnummer '{invoice_number}' is zojuist al gebruikt door een andere registratie. Vernieuw de pagina en probeer opnieuw."
         })
     for r in saved:
-        db.add(IncomeReceipt(income_id=income.id, file_path=r["path"], suffix=r["suffix"]))
+        db.add(IncomeReceipt(income_id=income.id, file_path=r["path"], suffix=r["suffix"],
+                             file_hash=r.get("file_hash")))
     await db.commit()
     return RedirectResponse("/inkomsten", status_code=302)
 
@@ -359,7 +360,8 @@ async def update_income(
     if valid_files:
         new_saved = await save_receipts(valid_files, "inkomsten", cat.slug, invoice_number)
         for r in new_saved:
-            db.add(IncomeReceipt(income_id=income.id, file_path=r["path"], suffix=r["suffix"]))
+            db.add(IncomeReceipt(income_id=income.id, file_path=r["path"], suffix=r["suffix"],
+                                 file_hash=r.get("file_hash")))
         if not income.receipt_path and new_saved:
             income.receipt_path = new_saved[0]["path"]
 

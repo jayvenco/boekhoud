@@ -81,6 +81,18 @@ async def init_db():
             except Exception:
                 pass
 
+        # Duplicaatdetectie: SHA-256 hashes op bonnen + hash/waarschuwing op scan-wachtrij.
+        for ddl in [
+            "ALTER TABLE scan_queue ADD COLUMN file_hash VARCHAR(64)",
+            "ALTER TABLE scan_queue ADD COLUMN duplicate_warning TEXT",
+            "ALTER TABLE income_receipts ADD COLUMN file_hash VARCHAR(64)",
+            "ALTER TABLE expense_receipts ADD COLUMN file_hash VARCHAR(64)",
+        ]:
+            try:
+                await conn.exec_driver_sql(ddl)
+            except Exception:
+                pass
+
         # fiscal_years & fiscal_year_audit_logs worden automatisch aangemaakt via create_all.
         # Geen extra ALTER TABLE nodig; dit zijn nieuwe tabellen.
 

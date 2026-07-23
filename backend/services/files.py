@@ -1,6 +1,7 @@
 from typing import Optional
 import os
 import shutil
+import hashlib
 from pathlib import Path
 from fastapi import UploadFile
 
@@ -67,6 +68,7 @@ async def save_receipts(
             results.append({
                 "path": str(dest_path.relative_to(UPLOAD_ROOT)),
                 "suffix": suffix,
+                "file_hash": hashlib.sha256(file_bytes).hexdigest(),
             })
         except Exception:
             continue

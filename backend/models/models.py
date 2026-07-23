@@ -172,6 +172,7 @@ class IncomeReceipt(Base):
     income_id = Column(Integer, ForeignKey("incomes.id"), nullable=False)
     file_path = Column(String(500), nullable=False)
     suffix = Column(String(5), nullable=True)   # a, b, c, ...
+    file_hash = Column(String(64), nullable=True)  # SHA-256 (duplicaatdetectie)
     created_at = Column(DateTime, server_default=func.now())
     income = relationship("Income", back_populates="receipts")
 
@@ -182,6 +183,7 @@ class ExpenseReceipt(Base):
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=False)
     file_path = Column(String(500), nullable=False)
     suffix = Column(String(5), nullable=True)
+    file_hash = Column(String(64), nullable=True)  # SHA-256 (duplicaatdetectie)
     created_at = Column(DateTime, server_default=func.now())
     expense = relationship("Expense", back_populates="receipts")
 
@@ -324,6 +326,8 @@ class ScanQueue(Base):
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=True)
     transaction_type = Column(String(20), nullable=False)  # "inkomst" or "uitgave"
+    file_hash = Column(String(64), nullable=True)  # SHA-256 van het bestand (duplicaatdetectie)
+    duplicate_warning = Column(Text, nullable=True)  # gevuld als een mogelijk duplicaat is gevonden
     ocr_date = Column(String(20), nullable=True)
     ocr_amount = Column(Float, nullable=True)
     ocr_description = Column(Text, nullable=True)

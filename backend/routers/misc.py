@@ -120,6 +120,18 @@ async def ocr_upload(
         # Keep the temp file and return its ID so the form can reference it
         result["_tmp_file"] = tmp_filename
         result["_original_filename"] = safe_name
+
+        # Duplicaatdetectie: waarschuw (blokkeer niet) als deze bon al bestaat.
+        from backend.services.duplicates import compute_hash, find_duplicate
+        warning = await find_duplicate(
+            db,
+            file_hash=compute_hash(file_content),
+            invoice_number=result.get("invoice_number"),
+            amount=result.get("amount"),
+            date_str=result.get("date"),
+        )
+        if warning:
+            result["_duplicate_warning"] = warning
         return JSONResponse(result)
     except Exception as e:
         return JSONResponse({"error": f"Verwerkingsfout: {str(e)}"})

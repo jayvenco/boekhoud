@@ -19,6 +19,7 @@ from backend.services.ocr import process_receipt
 from backend.services.files import UPLOAD_ROOT, ALLOWED_EXTENSIONS
 from backend.services.invoice_numbering import get_numbering_settings, get_next_invoice_number
 from backend.services.fiscal_year import is_year_locked
+from backend.services.duplicates import compute_hash, find_duplicate
 from backend.services.i18n import t
 from backend.routers.incomes import RECEIVED_VIA_OPTIONS, parse_date as parse_date_inc
 
@@ -97,6 +98,8 @@ async def upload_and_scan(
 
     SCAN_DIR.mkdir(parents=True, exist_ok=True)
     count = 0
+    batch_hashes: dict[str, str] = {}       # hash -> originele bestandsnaam (binnen deze upload)
+    batch_invoices: dict[str, str] = {}     # origineel factuurnr -> bestandsnaam (binnen deze upload)
 
     for bestand in bestanden:
         if not bestand.filename:
@@ -109,6 +112,7 @@ async def upload_and_scan(
         if not content or len(content) > 10 * 1024 * 1024:
             continue
 
+        file_hash = compute_hash(content)
         safe_name = f"{uuid.uuid4().hex}{ext}"
         file_path = SCAN_DIR / safe_name
         file_path.write_bytes(content)
@@ -129,14 +133,35 @@ async def upload_and_scan(
             except ValueError:
                 ocr_date_iso = None
 
+        ocr_invoice = result.get("invoice_number")
+
+        # Duplicaatdetectie: eerst binnen deze upload-batch, dan tegen bestaande records.
+        warning = None
+        if file_hash in batch_hashes:
+            warning = f"Zelfde bestand zit ook in deze upload ({batch_hashes[file_hash]})."
+        elif ocr_invoice and str(ocr_invoice).strip() in batch_invoices:
+            warning = (f"Origineel factuurnummer '{ocr_invoice}' zit ook in deze upload "
+                       f"({batch_invoices[str(ocr_invoice).strip()]}).")
+        else:
+            warning = await find_duplicate(
+                db, file_hash=file_hash, invoice_number=ocr_invoice,
+                amount=result.get("amount"), date_str=ocr_date_iso,
+            )
+
+        batch_hashes.setdefault(file_hash, bestand.filename)
+        if ocr_invoice and str(ocr_invoice).strip():
+            batch_invoices.setdefault(str(ocr_invoice).strip(), bestand.filename)
+
         item = ScanQueue(
             filename=safe_name,
             original_filename=bestand.filename,
             transaction_type=transaction_type,
+            file_hash=file_hash,
+            duplicate_warning=warning,
             ocr_date=ocr_date_iso,
             ocr_amount=result.get("amount"),
             ocr_description=result.get("description"),
-            ocr_invoice_number=result.get("invoice_number"),
+            ocr_invoice_number=ocr_invoice,
             ocr_category_suggestion=result.get("category_suggestion"),
             ocr_error=result.get("error") or result.get("_ai_error"),
         )
@@ -232,7 +257,7 @@ async def approve_item(
 
         rel_path = _move_scan_file(item.filename, "inkomsten", cat.slug, invoice_number)
         if rel_path:
-            db.add(IncomeReceipt(income_id=rec.id, file_path=rel_path))
+            db.add(IncomeReceipt(income_id=rec.id, file_path=rel_path, file_hash=item.file_hash))
 
     else:
         cat = await db.get(ExpenseCategory, category_id)
@@ -252,7 +277,7 @@ async def approve_item(
 
         rel_path = _move_scan_file(item.filename, "uitgaven", cat.slug, invoice_number)
         if rel_path:
-            db.add(ExpenseReceipt(expense_id=rec.id, file_path=rel_path))
+            db.add(ExpenseReceipt(expense_id=rec.id, file_path=rel_path, file_hash=item.file_hash))
 
     await db.delete(item)
     await db.commit()
