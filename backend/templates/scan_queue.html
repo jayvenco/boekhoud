@@ -144,10 +144,10 @@
         </div>
 
         <div class="form-group" style="margin:0;">
-          <label for="leverancier-{{ item.id }}">Factuur nummer leverancier</label>
+          <label for="leverancier-{{ item.id }}">Factuurnummer origineel</label>
           <input type="text" name="factuurnummer_leverancier" id="leverancier-{{ item.id }}"
                  value="{{ item.ocr_invoice_number or '' }}"
-                 placeholder="Origineel nummer op de bon">
+                 placeholder="Origineel nummer op de bon/factuur">
         </div>
 
         <!-- Inkomsten categorie -->

@@ -119,7 +119,7 @@
             </span>
             {% if e.is_auto_generated %}<span class="badge badge-neutral" style="font-size:10px;margin-left:4px;">auto</span>{% endif %}
           {% endif %}
-          {% if e.supplier_invoice_number %}<div style="font-weight:400;font-size:11px;color:var(--mid);">Lev.: {{ e.supplier_invoice_number }}</div>{% endif %}
+          {% if e.supplier_invoice_number %}<div style="font-weight:400;font-size:11px;color:var(--mid);">Orig.: {{ e.supplier_invoice_number }}</div>{% endif %}
         </td>
         <td>{{ e.date.strftime("%d-%m-%Y") }}</td>
         <td><span class="badge badge-neutral">{{ e.category.name }}</span></td>

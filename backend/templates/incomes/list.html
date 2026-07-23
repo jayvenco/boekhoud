@@ -118,7 +118,7 @@
       {% for i in incomes %}
       <tr>
         <td style="font-weight:500;color:var(--dark)">{{ i.invoice_number }}
-          {% if i.supplier_invoice_number %}<div style="font-weight:400;font-size:11px;color:var(--mid);">Lev.: {{ i.supplier_invoice_number }}</div>{% endif %}
+          {% if i.supplier_invoice_number %}<div style="font-weight:400;font-size:11px;color:var(--mid);">Orig.: {{ i.supplier_invoice_number }}</div>{% endif %}
         </td>
         <td>{{ i.date.strftime("%d-%m-%Y") }}</td>
         <td><span class="badge badge-neutral">{{ i.category.name }}</span></td>

@@ -97,11 +97,22 @@ async def upload_and_scan(
         except Exception as e:
             result = {"error": str(e)}
 
+        # Normaliseer de door AI herkende datum (vaak DD-MM-YYYY) naar ISO-formaat
+        # (YYYY-MM-DD), zodat het <input type="date"> veld correct vult en de
+        # automatische factuurnummering op basis van het jaartal kan starten.
+        ocr_date_iso = None
+        raw_ocr_date = result.get("date")
+        if raw_ocr_date:
+            try:
+                ocr_date_iso = parse_date_inc(str(raw_ocr_date)).isoformat()
+            except ValueError:
+                ocr_date_iso = None
+
         item = ScanQueue(
             filename=safe_name,
             original_filename=bestand.filename,
             transaction_type=transaction_type,
-            ocr_date=result.get("date"),
+            ocr_date=ocr_date_iso,
             ocr_amount=result.get("amount"),
             ocr_description=result.get("description"),
             ocr_invoice_number=result.get("invoice_number"),
@@ -157,15 +168,25 @@ async def approve_item(
     except ValueError:
         return RedirectResponse("/scan-wachtrij?error=bedrag", status_code=302)
 
-    # Factuurnummer
+    # Factuurnummer — volgt onze eigen naming-conventie op basis van het jaartal.
+    # Een leeg veld of een (door de JS voor-ingevuld / handmatig getypt) nummer dat
+    # al bestaat, wordt vervangen door het eerstvolgende vrije nummer. Zo krijgen
+    # meerdere scans van hetzelfde jaar/type bij bulk-goedkeuren nooit een duplicaat.
+    ns = await get_numbering_settings(db)
+    inv_type = "inkomsten" if transaction_type == "inkomst" else "uitgaven"
+    model = Income if transaction_type == "inkomst" else Expense
     invoice_number = factuurnummer.strip()
+
+    async def _number_taken(num: str) -> bool:
+        r = await db.execute(select(model).where(model.invoice_number == num))
+        return r.scalar_one_or_none() is not None
+
     if not invoice_number:
-        ns = await get_numbering_settings(db)
-        if ns.auto_enabled:
-            inv_type = "inkomsten" if transaction_type == "inkomst" else "uitgaven"
-            invoice_number = await get_next_invoice_number(db, record_date.year, inv_type, ns)
-        else:
+        if not ns.auto_enabled:
             return RedirectResponse("/scan-wachtrij?error=factuurnummer", status_code=302)
+        invoice_number = await get_next_invoice_number(db, record_date.year, inv_type, ns)
+    elif await _number_taken(invoice_number):
+        invoice_number = await get_next_invoice_number(db, record_date.year, inv_type, ns)
 
     description = omschrijving.strip() or None
     supplier_invoice = factuurnummer_leverancier.strip() or None
