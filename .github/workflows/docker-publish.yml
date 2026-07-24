@@ -2,7 +2,7 @@ name: Build & push Docker image
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
 
 jobs:
   build-and-push:
@@ -22,11 +22,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Bepaal image-tags op basis van de branch
+        id: meta
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "tags=ghcr.io/jayvenco/boekhoud:latest,ghcr.io/jayvenco/boekhoud:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=ghcr.io/jayvenco/boekhoud:staging,ghcr.io/jayvenco/boekhoud:staging-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: |
-            ghcr.io/jayvenco/boekhoud:latest
-            ghcr.io/jayvenco/boekhoud:${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
