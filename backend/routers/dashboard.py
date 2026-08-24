@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from backend.models.database import get_db
-from backend.models.models import Income, Expense, ExpenseCategory, IncomeCategory, Depreciation, ChecklistItem, YearClosure, FiscalYear
+from backend.models.models import Income, Expense, ExpenseCategory, IncomeCategory, Depreciation, ChecklistItem, YearClosure, FiscalYear, TimeEntry, HourCategory
 from backend.routers.auth import require_auth
 from backend.routers.checklist import get_checklist_summary
+from backend.routers.hours import URENCRITERIUM_UREN
 from backend.services.i18n import t
 from backend.services.pdf_export import generate_yearly_pdf
 from datetime import date, datetime
@@ -197,6 +198,17 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
     total_inc = inc_total.scalar() or 0
     total_exp = exp_total.scalar() or 0
 
+    hours_by_cat = await db.execute(
+        select(HourCategory.name, func.sum(TimeEntry.hours).label("total"))
+        .join(TimeEntry, TimeEntry.category_id == HourCategory.id)
+        .where(year_filter(TimeEntry, year))
+        .group_by(HourCategory.name)
+    )
+    hours_total_result = await db.execute(
+        select(func.sum(TimeEntry.hours)).where(year_filter(TimeEntry, year))
+    )
+    total_hours = hours_total_result.scalar() or 0.0
+
     return templates.TemplateResponse(request, "reports.html", {
         "year": year,
         "years": list(range(2022, datetime.now().year + 2)),
@@ -207,6 +219,10 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
         "profit": total_inc - total_exp,
         "depreciations": dep_data,
         "dep_this_year": dep_this_year,
+        "hours_by_cat": [(r.name, float(r.total)) for r in hours_by_cat],
+        "total_hours": total_hours,
+        "urencriterium": URENCRITERIUM_UREN,
+        "urencriterium_pct": min(100, round(total_hours / URENCRITERIUM_UREN * 100)) if URENCRITERIUM_UREN else 0,
     })
 
 

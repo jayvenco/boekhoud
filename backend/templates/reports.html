@@ -78,6 +78,46 @@
   </div>
 </div>
 
+<div class="card" style="margin-bottom:28px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <div class="section-title" style="margin-bottom:0;">Urenregistratie</div>
+    <a href="/uren" class="btn btn-outline btn-sm">Naar urenregistratie</a>
+  </div>
+  <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+    <div class="stat-card">
+      <div class="stat-label">Totaal uren {{ year }}</div>
+      <div class="stat-value">{{ "%.1f"|format(total_hours) }}</div>
+    </div>
+    <div class="stat-card {% if urencriterium_pct >= 100 %}income{% else %}warning{% endif %}">
+      <div class="stat-label">Voortgang urencriterium</div>
+      <div class="stat-value">{{ urencriterium_pct }}%</div>
+      <div class="stat-sub">van {{ urencriterium }} uur</div>
+      <div style="background:var(--stone);border-radius:4px;height:6px;margin-top:8px;">
+        <div style="background:var(--sage);height:6px;border-radius:4px;width:{{ urencriterium_pct }}%;"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Categorieën</div>
+      <div class="stat-value">{{ hours_by_cat|length }}</div>
+      <div class="stat-sub">met registraties in {{ year }}</div>
+    </div>
+  </div>
+  {% if hours_by_cat %}
+  <table>
+    <thead><tr><th>Categorie</th><th>Uren</th><th>%</th></tr></thead>
+    <tbody>
+      {% for name, total in hours_by_cat %}
+      <tr>
+        <td>{{ name }}</td>
+        <td class="amount">{{ "%.1f"|format(total) }}</td>
+        <td style="color:var(--light-text)">{{ "%.0f"|format(total / total_hours * 100) if total_hours else 0 }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="empty-state"><p>Geen uren geregistreerd in {{ year }}</p></div>{% endif %}
+</div>
+
 {% if depreciations %}
 <div class="card">
   <div class="section-title" style="margin-bottom:4px;">Afschrijvingsoverzicht</div>

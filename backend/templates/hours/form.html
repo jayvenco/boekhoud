@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{% if entry %}Uren bewerken{% else %}Uren registreren{% endif %}{% endblock %}
+{% block page_title %}{% if entry %}Uren bewerken{% else %}Uren registreren{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/uren" class="btn btn-outline">← Terug</a>
+{% endblock %}
+
+{% block content %}
+{% if year_locked %}
+<div class="alert alert-error" style="display:flex;align-items:center;gap:10px;">
+  🔒 <strong>Alleen-lezen</strong> — Boekjaar {{ entry.date.year if entry else '' }} is afgesloten. Gegevens kunnen niet worden gewijzigd.
+  <a href="/boekjaren" style="margin-left:auto;color:inherit;font-weight:600;">Boekjaren beheren →</a>
+</div>
+{% elif error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card" style="max-width:640px;">
+  <form method="post">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="date">Datum *</label>
+        <input type="date" id="date" name="date" required
+               value="{{ entry.date.strftime('%Y-%m-%d') if entry else '' }}"
+               style="cursor:pointer;">
+      </div>
+      <div class="form-group">
+        <label for="hours">Gewerkte uren *</label>
+        <input type="number" id="hours" name="hours" step="0.25" min="0.25" required
+               value="{{ entry.hours if entry else '' }}" placeholder="bijv. 4.5">
+      </div>
+      <div class="form-group">
+        <label for="category_id">Categorie *</label>
+        <select id="category_id" name="category_id" required>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if entry and entry.category_id == cat.id %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group form-full">
+        <label for="description">Omschrijving</label>
+        <textarea id="description" name="description" placeholder="Optionele omschrijving…">{{ entry.description if entry else '' }}</textarea>
+      </div>
+    </div>
+    <div style="margin-top:22px;display:flex;gap:12px;">
+      {% if not year_locked %}
+      <button type="submit" class="btn btn-primary">
+        {% if entry %}Wijzigingen opslaan{% else %}Uren opslaan{% endif %}
+      </button>
+      {% endif %}
+      <a href="/uren" class="btn btn-outline">{% if year_locked %}Terug{% else %}Annuleren{% endif %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
