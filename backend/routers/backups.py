@@ -10,9 +10,11 @@ from backend.models.backup_database import get_backup_db
 from backend.models.models import BackupSettings
 from backend.routers.auth import require_auth
 from backend.services import backup as backup_service
+from backend.services.i18n import t
 
 router = APIRouter()
 templates = Jinja2Templates(directory="backend/templates")
+templates.env.globals["t"] = t
 
 
 @router.get("/backups", response_class=HTMLResponse)

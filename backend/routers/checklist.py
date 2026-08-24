@@ -9,9 +9,11 @@ from typing import Optional
 from backend.models.database import get_db
 from backend.models.models import ChecklistItem
 from backend.routers.auth import require_auth
+from backend.services.i18n import t
 
 router = APIRouter(prefix="/checklist")
 templates = Jinja2Templates(directory="backend/templates")
+templates.env.globals["t"] = t
 
 # Standaard controlepunten — optioneel met één klik toe te voegen bij een
 # nieuw boekjaar. Volgorde bepaalt de weergavevolgorde bij aanmaken.

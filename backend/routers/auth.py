@@ -6,9 +6,11 @@ from sqlalchemy import select
 from backend.models.database import get_db
 from backend.models.models import User
 from backend.services.auth import verify_password, create_session_token, verify_session_token
+from backend.services.i18n import t
 
 router = APIRouter()
 templates = Jinja2Templates(directory="backend/templates")
+templates.env.globals["t"] = t
 
 
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)):

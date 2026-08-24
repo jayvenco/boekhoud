@@ -93,6 +93,14 @@ async def init_db():
             except Exception:
                 pass
 
+        # Interface-taal (i18n).
+        try:
+            await conn.exec_driver_sql(
+                "ALTER TABLE company_settings ADD COLUMN language VARCHAR(5) DEFAULT 'nl'"
+            )
+        except Exception:
+            pass
+
         # fiscal_years & fiscal_year_audit_logs worden automatisch aangemaakt via create_all.
         # Geen extra ALTER TABLE nodig; dit zijn nieuwe tabellen.
 

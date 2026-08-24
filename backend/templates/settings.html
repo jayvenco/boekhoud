@@ -10,6 +10,21 @@
 <div class="alert alert-error">⚠️ Ongeldig nummerformaat. Gebruik alleen de plaatshouders <code>{year}</code> en <code>{number}</code>, bijvoorbeeld <code>{year}-{number}</code>.</div>
 {% endif %}
 
+<div class="card" style="margin-bottom:24px;">
+  <div class="section-title" style="margin-bottom:8px;">{{ t('settings_language_title') }}</div>
+  <p style="font-size:13px;color:var(--light-text);margin-bottom:14px;">{{ t('settings_language_hint') }}</p>
+  {% set curlang = settings.language if settings and settings.language else 'nl' %}
+  <form method="post" action="/instellingen/taal" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <label class="lang-opt" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;{% if curlang == 'nl' %}border-color:var(--brand,#8B6F4E);background:var(--brand-lite,#F5EDE3);{% endif %}">
+      <input type="radio" name="language" value="nl" {% if curlang == 'nl' %}checked{% endif %}> 🇳🇱 {{ t('language_dutch') }}
+    </label>
+    <label class="lang-opt" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;{% if curlang == 'en' %}border-color:var(--brand,#8B6F4E);background:var(--brand-lite,#F5EDE3);{% endif %}">
+      <input type="radio" name="language" value="en" {% if curlang == 'en' %}checked{% endif %}> 🇬🇧 {{ t('language_english') }}
+    </label>
+    <button type="submit" class="btn btn-primary btn-sm">Opslaan / Save</button>
+  </form>
+</div>
+
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
   <div class="card">
     <div class="section-title" style="margin-bottom:20px;">Bedrijfsinstellingen</div>
