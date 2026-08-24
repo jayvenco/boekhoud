@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.database import get_db
 from backend.models.backup_database import get_backup_db
-from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense, IncomeCategory, InvoiceNumberingSettings, APISettings
+from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense, IncomeCategory, HourCategory, InvoiceNumberingSettings, APISettings
 from backend.routers.auth import require_auth
 from backend.services.ocr import process_receipt
 from backend.services.files import save_receipts, UPLOAD_ROOT
@@ -379,6 +379,9 @@ async def settings_page(
     result = await db.execute(select(IncomeCategory).order_by(IncomeCategory.name))
     income_categories = result.scalars().all()
 
+    result = await db.execute(select(HourCategory).order_by(HourCategory.name))
+    hour_categories = result.scalars().all()
+
     result = await db.execute(select(APISettings))
     api_settings = result.scalar_one_or_none()
 
@@ -390,11 +393,14 @@ async def settings_page(
         "ai_key_masks": ai_key_masks,
         "invoice_numbering_settings": invoice_numbering_settings,
         "income_categories": income_categories,
+        "hour_categories": hour_categories,
         "api_settings": api_settings,
         "success": request.query_params.get("success"),
         "error": request.query_params.get("error"),
         "cat_error": request.query_params.get("cat_error"),
-        "cat_id": request.query_params.get("cat_id")})
+        "cat_id": request.query_params.get("cat_id"),
+        "urencat_error": request.query_params.get("urencat_error"),
+        "urencat_id": request.query_params.get("urencat_id")})
 
 
 @router.post("/instellingen")

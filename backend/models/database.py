@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from backend.models.models import Base, User, IncomeCategory, ExpenseCategory, CompanySettings, AISettings, InvoiceNumberingSettings, FiscalYear, YearClosure, APISettings
+from backend.models.models import Base, User, IncomeCategory, ExpenseCategory, HourCategory, CompanySettings, AISettings, InvoiceNumberingSettings, FiscalYear, YearClosure, APISettings
 import bcrypt
 import os
 
@@ -136,6 +136,17 @@ async def init_db():
                 ExpenseCategory(name="Overige", slug="overige"),
             ]
             session.add_all(ecats)
+
+        # Seed uren-categorieën
+        result = await session.execute(select(HourCategory))
+        if not result.scalars().first():
+            hcats = [
+                HourCategory(name="Behandeling", slug="behandeling"),
+                HourCategory(name="Administratie", slug="administratie"),
+                HourCategory(name="Reistijd", slug="reistijd"),
+                HourCategory(name="Overig", slug="overig"),
+            ]
+            session.add_all(hcats)
 
         # Seed default admin user
         result = await session.execute(select(User))

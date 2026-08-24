@@ -103,6 +103,26 @@ class ExpenseCategory(Base):
     expenses = relationship("Expense", back_populates="category")
 
 
+class HourCategory(Base):
+    __tablename__ = "hour_categories"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    slug = Column(String(100), unique=True, nullable=False)
+    time_entries = relationship("TimeEntry", back_populates="category")
+
+
+class TimeEntry(Base):
+    __tablename__ = "time_entries"
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False)
+    hours = Column(Float, nullable=False)
+    category_id = Column(Integer, ForeignKey("hour_categories.id"), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    category = relationship("HourCategory", back_populates="time_entries")
+
+
 class ReceivedVia(str, enum.Enum):
     zakelijke_rekening = "zakelijke_rekening"
     priverekening = "priverekening"

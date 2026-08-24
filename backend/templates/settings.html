@@ -414,6 +414,102 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endif %}
 </script>
 
+<div style="margin-top:20px;" class="card" id="uren-categorieen">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div class="section-title" style="margin-bottom:0;">Uren-categorieën</div>
+    <button type="button" onclick="toggleUrenCatForm('new')" class="btn btn-primary btn-sm">+ Nieuwe categorie</button>
+  </div>
+
+  {% if urencat_error %}
+  {% set urencat_error_msgs = {
+    'naam_verplicht': 'Categorienaam is verplicht.',
+    'naam_bestaat': 'Er bestaat al een categorie met deze naam.',
+    'heeft_uren': 'Deze categorie kan niet worden verwijderd omdat er nog uren aan gekoppeld zijn.'
+  } %}
+  <div class="alert alert-error" style="margin-bottom:16px;">
+    ⚠️ {{ urencat_error_msgs[urencat_error] if urencat_error in urencat_error_msgs else urencat_error }}
+  </div>
+  {% endif %}
+
+  <!-- Formulier: nieuwe categorie -->
+  <div id="urencat-form-new" style="display:none;border:1px solid var(--stone);border-radius:8px;padding:16px;margin-bottom:20px;background:#f9f9f7;">
+    <div style="font-weight:600;margin-bottom:14px;font-size:14px;">Nieuwe categorie</div>
+    <form method="post" action="/uren/categorieen/nieuw">
+      <div class="form-group">
+        <label>Categorienaam *</label>
+        <input type="text" name="name" required placeholder="bijv. Nascholing">
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px;">
+        <button type="submit" class="btn btn-primary btn-sm">Categorie aanmaken</button>
+        <button type="button" onclick="toggleUrenCatForm('new')" class="btn btn-outline btn-sm">Annuleren</button>
+      </div>
+    </form>
+  </div>
+
+  {% if hour_categories %}
+  <div style="overflow-x:auto;">
+    <table class="table" style="font-size:13px;">
+      <thead>
+        <tr><th>Naam</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for cat in hour_categories %}
+      <tr>
+        <td><strong>{{ cat.name }}</strong></td>
+        <td style="white-space:nowrap;">
+          <button type="button" onclick="toggleUrenCatForm({{ cat.id }})" class="btn btn-outline btn-sm">Bewerken</button>
+          <form method="post" action="/uren/categorieen/{{ cat.id }}/verwijderen" style="display:inline;">
+            <button type="submit" class="btn btn-sm" style="background:var(--danger,#e53935);color:#fff;border:none;"
+              onclick="return confirm('Categorie \'{{ cat.name }}\' definitief verwijderen?')">Verwijderen</button>
+          </form>
+        </td>
+      </tr>
+      <tr id="urencat-form-{{ cat.id }}" style="display:none;background:#f9f9f7;">
+        <td colspan="2" style="padding:16px;">
+          <form method="post" action="/uren/categorieen/{{ cat.id }}/bewerken">
+            <div class="form-group">
+              <label>Categorienaam *</label>
+              <input type="text" name="name" value="{{ cat.name }}" required>
+            </div>
+            <div style="margin-top:14px;display:flex;gap:8px;">
+              <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+              <button type="button" onclick="toggleUrenCatForm({{ cat.id }})" class="btn btn-outline btn-sm">Annuleren</button>
+            </div>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:13px;color:var(--mid);">Nog geen categorieën aangemaakt. Klik op "+ Nieuwe categorie" om te beginnen.</p>
+  {% endif %}
+</div>
+
+<script>
+function toggleUrenCatForm(id) {
+  const el = document.getElementById('urencat-form-' + id);
+  if (!el) return;
+  if (el.tagName === 'TR') {
+    el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+  } else {
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+}
+{% if urencat_error %}
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('uren-categorieen').scrollIntoView({behavior: 'smooth'});
+  {% if urencat_id %}
+  const editRow = document.getElementById('urencat-form-{{ urencat_id }}');
+  if (editRow) editRow.style.display = 'table-row';
+  {% else %}
+  document.getElementById('urencat-form-new').style.display = 'block';
+  {% endif %}
+});
+{% endif %}
+</script>
+
 <div id="api-instellingen" style="margin-top:20px;" class="card">
   <div class="section-title" style="margin-bottom:16px;">API-toegang voor AI-agents</div>
   <p style="font-size:13px;color:var(--light-text);margin-bottom:16px;">

@@ -16,6 +16,7 @@ from backend.routers import auth, incomes, expenses, dashboard, misc, backups, a
 from backend.routers import fiscal_years
 from backend.routers import api as api_router
 from backend.routers import scan_queue as scan_queue_router
+from backend.routers import hours
 from backend.middleware import SettingsMiddleware
 from backend.services.backup import configure_backup_job
 
@@ -118,6 +119,7 @@ app.include_router(checklist.router)
 app.include_router(fiscal_years.router)
 app.include_router(api_router.router)
 app.include_router(scan_queue_router.router)
+app.include_router(hours.router)
 
 
 @app.get("/manifest.json")
