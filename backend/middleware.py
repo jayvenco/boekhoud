@@ -3,7 +3,6 @@ from sqlalchemy import select
 from backend.models.database import AsyncSessionLocal
 from backend.models.models import CompanySettings, User
 from backend.services.auth import verify_session_token
-from backend.services.i18n import set_locale, DEFAULT_LOCALE
 
 
 class SettingsMiddleware(BaseHTTPMiddleware):
@@ -13,10 +12,6 @@ class SettingsMiddleware(BaseHTTPMiddleware):
                 # Load company settings
                 result = await db.execute(select(CompanySettings))
                 request.state.settings = result.scalar_one_or_none()
-
-                # Zet de interface-taal voor deze request (i18n).
-                settings = request.state.settings
-                set_locale(getattr(settings, "language", None) or DEFAULT_LOCALE)
 
                 # Load current user from session cookie
                 token = request.cookies.get("session")
@@ -32,5 +27,4 @@ class SettingsMiddleware(BaseHTTPMiddleware):
             except Exception:
                 request.state.settings = None
                 request.state.user = None
-                set_locale(DEFAULT_LOCALE)
         return await call_next(request)

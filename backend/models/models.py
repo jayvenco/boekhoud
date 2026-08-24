@@ -79,7 +79,6 @@ class CompanySettings(Base):
     id = Column(Integer, primary_key=True)
     company_name = Column(String(200), default="Mijn Bedrijf")
     logo_path = Column(String(500), nullable=True)
-    language = Column(String(5), default="nl")  # interface-taal: "nl" of "en"
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 

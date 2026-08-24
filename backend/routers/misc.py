@@ -429,28 +429,6 @@ async def update_settings(
     return RedirectResponse("/instellingen?success=1", status_code=302)
 
 
-@router.post("/instellingen/taal")
-async def update_language(
-    request: Request,
-    language: str = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    user = await require_auth(request, db)
-    if isinstance(user, RedirectResponse):
-        return user
-    from backend.services.i18n import SUPPORTED_LOCALES
-    if language not in SUPPORTED_LOCALES:
-        language = "nl"
-    result = await db.execute(select(CompanySettings))
-    settings = result.scalar_one_or_none()
-    if not settings:
-        settings = CompanySettings()
-        db.add(settings)
-    settings.language = language
-    await db.commit()
-    return RedirectResponse("/instellingen?success=1", status_code=302)
-
-
 @router.post("/instellingen/api/genereer")
 async def generate_api_key(request: Request, db: AsyncSession = Depends(get_db)):
     user = await require_auth(request, db)
