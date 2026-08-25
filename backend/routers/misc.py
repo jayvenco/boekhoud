@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.database import get_db
 from backend.models.backup_database import get_backup_db
-from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense, IncomeCategory, HourCategory, InvoiceNumberingSettings, APISettings
+from backend.models.models import PlannedExpense, CompanySettings, BackupSettings, AISettings, User, Income, Expense, IncomeCategory, ExpenseCategory, HourCategory, InvoiceNumberingSettings, APISettings
 from backend.routers.auth import require_auth
 from backend.services.ocr import process_receipt
 from backend.services.files import save_receipts, UPLOAD_ROOT
@@ -349,6 +349,99 @@ async def delete_income_category(
     return RedirectResponse("/instellingen?success=1", status_code=302)
 
 
+# ── Uitgaven-categorieën ──────────────────────────────
+
+async def _unique_expense_slug(db: AsyncSession, base_slug: str, exclude_id: int = None) -> str:
+    slug = base_slug
+    i = 2
+    while True:
+        q = select(ExpenseCategory).where(ExpenseCategory.slug == slug)
+        if exclude_id:
+            q = q.where(ExpenseCategory.id != exclude_id)
+        res = await db.execute(q)
+        if not res.scalar_one_or_none():
+            return slug
+        slug = f"{base_slug}_{i}"
+        i += 1
+
+
+@router.post("/instellingen/uitgaven-categorieen/nieuw")
+async def create_expense_category(
+    request: Request,
+    name: str = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    name = name.strip()
+    if not name:
+        return RedirectResponse("/instellingen?expcat_error=naam_verplicht", status_code=302)
+
+    existing = await db.execute(select(ExpenseCategory).where(ExpenseCategory.name == name))
+    if existing.scalar_one_or_none():
+        return RedirectResponse("/instellingen?expcat_error=naam_bestaat", status_code=302)
+
+    slug = await _unique_expense_slug(db, _slugify(name))
+    db.add(ExpenseCategory(name=name, slug=slug))
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
+@router.post("/instellingen/uitgaven-categorieen/{id}/bewerken")
+async def update_expense_category(
+    id: int,
+    request: Request,
+    name: str = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    cat = await db.get(ExpenseCategory, id)
+    if not cat:
+        raise HTTPException(404)
+
+    name = name.strip()
+    if not name:
+        return RedirectResponse(f"/instellingen?expcat_error=naam_verplicht&expcat_id={id}", status_code=302)
+
+    existing = await db.execute(select(ExpenseCategory).where(ExpenseCategory.name == name, ExpenseCategory.id != id))
+    if existing.scalar_one_or_none():
+        return RedirectResponse(f"/instellingen?expcat_error=naam_bestaat&expcat_id={id}", status_code=302)
+
+    if cat.name != name:
+        cat.slug = await _unique_expense_slug(db, _slugify(name), exclude_id=id)
+    cat.name = name
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
+@router.post("/instellingen/uitgaven-categorieen/{id}/verwijderen")
+async def delete_expense_category(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    cat = await db.get(ExpenseCategory, id)
+    if not cat:
+        raise HTTPException(404)
+
+    linked = await db.execute(select(Expense).where(Expense.category_id == id))
+    if linked.scalar_one_or_none():
+        return RedirectResponse("/instellingen?expcat_error=heeft_uitgaven", status_code=302)
+
+    await db.delete(cat)
+    await db.commit()
+    return RedirectResponse("/instellingen?success=1", status_code=302)
+
+
 # ── Settings ───────────────────────────────────────────
 @router.get("/instellingen", response_class=HTMLResponse)
 async def settings_page(
@@ -379,6 +472,9 @@ async def settings_page(
     result = await db.execute(select(IncomeCategory).order_by(IncomeCategory.name))
     income_categories = result.scalars().all()
 
+    result = await db.execute(select(ExpenseCategory).order_by(ExpenseCategory.name))
+    expense_categories = result.scalars().all()
+
     result = await db.execute(select(HourCategory).order_by(HourCategory.name))
     hour_categories = result.scalars().all()
 
@@ -393,12 +489,15 @@ async def settings_page(
         "ai_key_masks": ai_key_masks,
         "invoice_numbering_settings": invoice_numbering_settings,
         "income_categories": income_categories,
+        "expense_categories": expense_categories,
         "hour_categories": hour_categories,
         "api_settings": api_settings,
         "success": request.query_params.get("success"),
         "error": request.query_params.get("error"),
         "cat_error": request.query_params.get("cat_error"),
         "cat_id": request.query_params.get("cat_id"),
+        "expcat_error": request.query_params.get("expcat_error"),
+        "expcat_id": request.query_params.get("expcat_id"),
         "urencat_error": request.query_params.get("urencat_error"),
         "urencat_id": request.query_params.get("urencat_id")})
 
