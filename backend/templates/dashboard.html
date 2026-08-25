@@ -57,6 +57,43 @@
   <canvas id="monthChart" height="90"></canvas>
 </div>
 
+<div class="card" style="margin-bottom:28px;">
+  <div class="section-header">
+    <span class="section-title">Urenregistratie {{ year }}</span>
+    <a href="/uren" class="btn btn-outline btn-sm">Alle uren</a>
+  </div>
+  {% if chart_hours and chart_hours|sum > 0 %}
+  <canvas id="hoursChart" height="70"></canvas>
+  {% else %}
+  <div class="empty-state"><div class="empty-state-icon">⏱️</div><p>Nog geen uren geregistreerd in {{ year }}</p></div>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px;">
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">Inkomsten per categorie</span>
+      <a href="/rapportages" class="btn btn-outline btn-sm">Rapportages</a>
+    </div>
+    {% if income_by_cat %}
+    <canvas id="incomeCatChart" height="180"></canvas>
+    {% else %}
+    <div class="empty-state"><div class="empty-state-icon">💶</div><p>Nog geen inkomsten in {{ year }}</p></div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">Uitgaven per categorie</span>
+      <a href="/rapportages" class="btn btn-outline btn-sm">Rapportages</a>
+    </div>
+    {% if expense_by_cat %}
+    <canvas id="expenseCatChart" height="180"></canvas>
+    {% else %}
+    <div class="empty-state"><div class="empty-state-icon">🧾</div><p>Nog geen uitgaven in {{ year }}</p></div>
+    {% endif %}
+  </div>
+</div>
+
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
   <div class="card">
     <div class="section-header">
@@ -159,5 +196,111 @@ new Chart(ctx, {
     }
   }
 });
+
+{% if chart_hours and chart_hours|sum > 0 %}
+new Chart(document.getElementById('hoursChart').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: {{ chart_months | tojson }},
+    datasets: [
+      {
+        label: 'Gewerkte uren',
+        data: {{ chart_hours | tojson }},
+        borderColor: '#8B6F4E',
+        backgroundColor: 'rgba(139, 111, 78, 0.12)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#8B6F4E',
+        tension: 0.3,
+        fill: true,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `${ctx.parsed.y.toFixed(1)} uur` } }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { callback: v => `${v}u`, font: { family: 'DM Sans', size: 12 } },
+        grid: { color: '#E8E3DC' }
+      },
+      x: {
+        ticks: { font: { family: 'DM Sans', size: 12 } },
+        grid: { display: false }
+      }
+    }
+  }
+});
+{% endif %}
+
+{% if income_by_cat %}
+new Chart(document.getElementById('incomeCatChart').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels: {{ income_by_cat | map(attribute=0) | list | tojson }},
+    datasets: [{
+      label: 'Inkomsten',
+      data: {{ income_by_cat | map(attribute=1) | list | tojson }},
+      backgroundColor: 'rgba(90, 144, 112, 0.7)',
+      borderColor: '#5A9070',
+      borderWidth: 1.5,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `€ ${ctx.parsed.x.toFixed(2)}` } }
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        ticks: { callback: v => `€ ${v}`, font: { family: 'DM Sans', size: 11 } },
+        grid: { color: '#E8E3DC' }
+      },
+      y: { ticks: { font: { family: 'DM Sans', size: 12 } }, grid: { display: false } }
+    }
+  }
+});
+{% endif %}
+
+{% if expense_by_cat %}
+new Chart(document.getElementById('expenseCatChart').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels: {{ expense_by_cat | map(attribute=0) | list | tojson }},
+    datasets: [{
+      label: 'Uitgaven',
+      data: {{ expense_by_cat | map(attribute=1) | list | tojson }},
+      backgroundColor: 'rgba(192, 102, 90, 0.5)',
+      borderColor: '#C0665A',
+      borderWidth: 1.5,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `€ ${ctx.parsed.x.toFixed(2)}` } }
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        ticks: { callback: v => `€ ${v}`, font: { family: 'DM Sans', size: 11 } },
+        grid: { color: '#E8E3DC' }
+      },
+      y: { ticks: { font: { family: 'DM Sans', size: 12 } }, grid: { display: false } }
+    }
+  }
+});
+{% endif %}
 </script>
 {% endblock %}
