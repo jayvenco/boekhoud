@@ -133,6 +133,31 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     exp_by_month = {int(r.month): float(r.total) for r in monthly_exp}
     months = ["Jan", "Feb", "Mrt", "Apr", "Mei", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"]
 
+    monthly_hours = await db.execute(
+        select(
+            func.strftime("%m", TimeEntry.date).label("month"),
+            func.sum(TimeEntry.hours).label("total")
+        ).where(year_filter(TimeEntry, year))
+        .group_by(func.strftime("%m", TimeEntry.date))
+        .order_by(func.strftime("%m", TimeEntry.date))
+    )
+    hours_by_month = {int(r.month): float(r.total) for r in monthly_hours}
+
+    inc_by_cat = await db.execute(
+        select(IncomeCategory.name, func.sum(Income.amount).label("total"))
+        .join(Income, Income.category_id == IncomeCategory.id)
+        .where(year_filter(Income, year))
+        .group_by(IncomeCategory.name)
+        .order_by(func.sum(Income.amount).desc())
+    )
+    exp_by_cat = await db.execute(
+        select(ExpenseCategory.name, func.sum(Expense.amount).label("total"))
+        .join(Expense, Expense.category_id == ExpenseCategory.id)
+        .where(year_filter(Expense, year))
+        .group_by(ExpenseCategory.name)
+        .order_by(func.sum(Expense.amount).desc())
+    )
+
     today = date.today()
     missing_receipt_result = await db.execute(
         select(Expense).options(selectinload(Expense.receipts)).where(
@@ -157,6 +182,9 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "chart_months": months,
         "chart_income": [inc_by_month.get(i, 0) for i in range(1, 13)],
         "chart_expenses": [exp_by_month.get(i, 0) for i in range(1, 13)],
+        "chart_hours": [hours_by_month.get(i, 0) for i in range(1, 13)],
+        "income_by_cat": [(r.name, float(r.total)) for r in inc_by_cat],
+        "expense_by_cat": [(r.name, float(r.total)) for r in exp_by_cat],
         "year": year,
     })
 

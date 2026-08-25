@@ -35,17 +35,17 @@ def _scan_path(filename: str) -> Path:
 
 
 def _build_description(invoice_number, date_str, amount, ai_description=None) -> str:
-    """Standaard omschrijving: origineel factuurnummer, datum en bedrag,
-    optioneel gevolgd door de door AI herkende omschrijving."""
+    """Standaard omschrijving: begint met de door AI herkende artikelomschrijving,
+    gevolgd door datum en bedrag, en eindigt met het originele factuurnummer."""
     parts = []
-    if invoice_number:
-        parts.append(f"Factuurnr.: {invoice_number}")
+    if ai_description:
+        parts.append(str(ai_description))
     if date_str:
         parts.append(f"Datum: {date_str}")
     if amount is not None:
         parts.append(f"Bedrag: € {amount:.2f}")
-    if ai_description:
-        parts.append(str(ai_description))
+    if invoice_number:
+        parts.append(f"Factuurnr.: {invoice_number}")
     return " | ".join(parts)
 
 

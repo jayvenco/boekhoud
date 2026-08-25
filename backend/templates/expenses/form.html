@@ -344,13 +344,14 @@ function updateInvoiceNumberBadge() {
   badge.style.display = invField.dataset.autoFilled === 'true' ? 'inline-block' : 'none';
 }
 
-// Stelt de standaard omschrijving samen uit origineel factuurnummer, datum en bedrag.
+// Stelt de standaard omschrijving samen: begint met de artikelomschrijving,
+// gevolgd door datum en bedrag, en eindigt met het originele factuurnummer.
 function buildDescription(data) {
   const parts = [];
-  if (data.invoice_number) parts.push('Factuurnr.: ' + data.invoice_number);
+  if (data.description)    parts.push(data.description);
   if (data.date)           parts.push('Datum: ' + data.date);
   if (data.amount)         parts.push('Bedrag: € ' + Number(data.amount).toFixed(2));
-  if (data.description)    parts.push(data.description);
+  if (data.invoice_number) parts.push('Factuurnr.: ' + data.invoice_number);
   return parts.join(' | ');
 }
 
