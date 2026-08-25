@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Request, Form, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from datetime import date, datetime
 from typing import Optional
+import csv
+import io
 
 from backend.models.database import get_db
 from backend.models.models import TimeEntry, HourCategory
@@ -86,6 +88,32 @@ async def list_hours(
         "urencriterium": URENCRITERIUM_UREN,
         "urencriterium_pct": min(100, round(year_total / URENCRITERIUM_UREN * 100)) if URENCRITERIUM_UREN else 0,
     })
+
+
+@router.get("/export/csv")
+async def export_hours_csv(
+    request: Request, db: AsyncSession = Depends(get_db),
+    from_date: str = "", to_date: str = "", category_id: str = "", year: str = "",
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    query = select(TimeEntry).options(selectinload(TimeEntry.category)).order_by(TimeEntry.date.desc())
+    query = _apply_filters(query, from_date, to_date, category_id, year)
+    result = await db.execute(query)
+    entries = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(["Datum", "Categorie", "Uren", "Omschrijving"])
+    for e in entries:
+        writer.writerow([e.date.strftime("%d-%m-%Y"), e.category.name,
+                         f"{e.hours:.2f}", e.description or ""])
+    output.seek(0)
+    return StreamingResponse(io.BytesIO(output.getvalue().encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=urenregistratie.csv"})
 
 
 @router.get("/nieuw", response_class=HTMLResponse)
