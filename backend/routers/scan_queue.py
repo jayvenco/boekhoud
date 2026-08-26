@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Form, Depends, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +8,9 @@ from pathlib import Path
 import uuid
 import shutil
 import os
+import logging
+
+logger = logging.getLogger("boekhoud.scan_queue")
 
 from backend.models.database import get_db
 from backend.models.models import (
@@ -32,6 +35,23 @@ SCAN_DIR = UPLOAD_ROOT / "scan_queue"
 
 def _scan_path(filename: str) -> Path:
     return SCAN_DIR / filename
+
+
+def _parse_amount_draft(bedrag: str) -> Optional[float]:
+    """Best-effort parse voor het concept-veld — geeft None terug bij een
+    ongeldige waarde in plaats van te crashen; de echte validatie gebeurt apart."""
+    try:
+        return float(bedrag.replace(",", "."))
+    except (ValueError, AttributeError):
+        return None
+
+
+async def _category_slug(db: AsyncSession, transaction_type: str, category_id: int) -> Optional[str]:
+    """Zoekt de slug op van de gekozen categorie, zodat die bij een heropgebouwde
+    pagina opnieuw als 'geselecteerd' wordt herkend (zie ocr_category_suggestion)."""
+    model = IncomeCategory if transaction_type == "inkomst" else ExpenseCategory
+    cat = await db.get(model, category_id)
+    return cat.slug if cat else None
 
 
 def _build_description(invoice_number, date_str, amount, ai_description=None) -> str:
@@ -102,74 +122,128 @@ async def upload_and_scan(
     batch_invoices: dict[str, str] = {}     # origineel factuurnr -> bestandsnaam (binnen deze upload)
 
     for bestand in bestanden:
-        if not bestand.filename:
-            continue
-        ext = Path(bestand.filename).suffix.lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            continue
-
-        content = await bestand.read()
-        if not content or len(content) > 10 * 1024 * 1024:
-            continue
-
-        file_hash = compute_hash(content)
-        safe_name = f"{uuid.uuid4().hex}{ext}"
-        file_path = SCAN_DIR / safe_name
-        file_path.write_bytes(content)
-
         try:
-            result = await process_receipt(str(file_path), db)
-        except Exception as e:
-            result = {"error": str(e)}
+            if not bestand.filename:
+                continue
+            ext = Path(bestand.filename).suffix.lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                continue
 
-        # Normaliseer de door AI herkende datum (vaak DD-MM-YYYY) naar ISO-formaat
-        # (YYYY-MM-DD), zodat het <input type="date"> veld correct vult en de
-        # automatische factuurnummering op basis van het jaartal kan starten.
-        ocr_date_iso = None
-        raw_ocr_date = result.get("date")
-        if raw_ocr_date:
+            content = await bestand.read()
+            if not content or len(content) > 10 * 1024 * 1024:
+                continue
+
+            file_hash = compute_hash(content)
+            safe_name = f"{uuid.uuid4().hex}{ext}"
+            file_path = SCAN_DIR / safe_name
+            file_path.write_bytes(content)
+
             try:
-                ocr_date_iso = parse_date_inc(str(raw_ocr_date)).isoformat()
-            except ValueError:
-                ocr_date_iso = None
+                result = await process_receipt(str(file_path), db)
+            except Exception as e:
+                logger.error(f"OCR-verwerking mislukt voor '{bestand.filename}': {type(e).__name__}: {e}")
+                result = {"error": f"Uitlezen mislukt ({type(e).__name__}). Vul de gegevens handmatig in."}
 
-        ocr_invoice = result.get("invoice_number")
+            # Normaliseer de door AI herkende datum (vaak DD-MM-YYYY) naar ISO-formaat
+            # (YYYY-MM-DD), zodat het <input type="date"> veld correct vult en de
+            # automatische factuurnummering op basis van het jaartal kan starten.
+            ocr_date_iso = None
+            raw_ocr_date = result.get("date")
+            if raw_ocr_date:
+                try:
+                    ocr_date_iso = parse_date_inc(str(raw_ocr_date)).isoformat()
+                except ValueError:
+                    ocr_date_iso = None
 
-        # Duplicaatdetectie: eerst binnen deze upload-batch, dan tegen bestaande records.
-        warning = None
-        if file_hash in batch_hashes:
-            warning = f"Zelfde bestand zit ook in deze upload ({batch_hashes[file_hash]})."
-        elif ocr_invoice and str(ocr_invoice).strip() in batch_invoices:
-            warning = (f"Origineel factuurnummer '{ocr_invoice}' zit ook in deze upload "
-                       f"({batch_invoices[str(ocr_invoice).strip()]}).")
-        else:
-            warning = await find_duplicate(
-                db, file_hash=file_hash, invoice_number=ocr_invoice,
-                amount=result.get("amount"), date_str=ocr_date_iso,
+            ocr_invoice = result.get("invoice_number")
+
+            # Duplicaatdetectie: eerst binnen deze upload-batch, dan tegen bestaande records.
+            warning = None
+            if file_hash in batch_hashes:
+                warning = f"Zelfde bestand zit ook in deze upload ({batch_hashes[file_hash]})."
+            elif ocr_invoice and str(ocr_invoice).strip() in batch_invoices:
+                warning = (f"Origineel factuurnummer '{ocr_invoice}' zit ook in deze upload "
+                           f"({batch_invoices[str(ocr_invoice).strip()]}).")
+            else:
+                warning = await find_duplicate(
+                    db, file_hash=file_hash, invoice_number=ocr_invoice,
+                    amount=result.get("amount"), date_str=ocr_date_iso,
+                )
+
+            batch_hashes.setdefault(file_hash, bestand.filename)
+            if ocr_invoice and str(ocr_invoice).strip():
+                batch_invoices.setdefault(str(ocr_invoice).strip(), bestand.filename)
+
+            item = ScanQueue(
+                filename=safe_name,
+                original_filename=bestand.filename,
+                transaction_type=transaction_type,
+                file_hash=file_hash,
+                duplicate_warning=warning,
+                ocr_date=ocr_date_iso,
+                ocr_amount=result.get("amount"),
+                ocr_description=result.get("description"),
+                ocr_invoice_number=ocr_invoice,
+                ocr_category_suggestion=result.get("category_suggestion"),
+                ocr_error=result.get("error") or result.get("_ai_error"),
             )
-
-        batch_hashes.setdefault(file_hash, bestand.filename)
-        if ocr_invoice and str(ocr_invoice).strip():
-            batch_invoices.setdefault(str(ocr_invoice).strip(), bestand.filename)
-
-        item = ScanQueue(
-            filename=safe_name,
-            original_filename=bestand.filename,
-            transaction_type=transaction_type,
-            file_hash=file_hash,
-            duplicate_warning=warning,
-            ocr_date=ocr_date_iso,
-            ocr_amount=result.get("amount"),
-            ocr_description=result.get("description"),
-            ocr_invoice_number=ocr_invoice,
-            ocr_category_suggestion=result.get("category_suggestion"),
-            ocr_error=result.get("error") or result.get("_ai_error"),
-        )
-        db.add(item)
-        count += 1
+            db.add(item)
+            count += 1
+        except Exception as e:
+            # Eén beschadigd of onverwacht bestand mag de rest van de bulk-upload
+            # nooit laten crashen — sla over, log het, en ga door met de volgende.
+            logger.error(f"Verwerking van '{getattr(bestand, 'filename', '?')}' overgeslagen: {type(e).__name__}: {e}")
+            continue
 
     await db.commit()
     return RedirectResponse(f"/scan-wachtrij?uploaded={count}", status_code=302)
+
+
+# ── Concept opslaan (live, per veldwijziging) ──────────────────
+#
+# De scan-wachtrij toont meerdere items op één pagina. Zolang wijzigingen
+# (zoals een handmatig gekozen categorie) alleen in de browser leven, gaan ze
+# verloren zodra een ANDER item wordt goedgekeurd — dat stuurt de hele pagina
+# naar de server en terug, en de server kent alleen wat al is opgeslagen. Dit
+# endpoint slaat elke wijziging direct op zodra de gebruiker 'm maakt, zodat
+# een goedkeuring van item A de nog-openstaande wijzigingen van item B, C, ...
+# niet meer terugzet naar de oorspronkelijke AI-suggestie.
+@router.post("/{id}/concept")
+async def save_draft(
+    id: int,
+    request: Request,
+    transaction_type: str = Form(...),
+    datum: str = Form(""),
+    bedrag: str = Form(""),
+    category_id: str = Form(""),
+    omschrijving: str = Form(""),
+    factuurnummer_leverancier: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "niet ingelogd"}, status_code=401)
+
+    item = await db.get(ScanQueue, id)
+    if not item:
+        return JSONResponse({"ok": False, "error": "niet gevonden"}, status_code=404)
+
+    item.transaction_type = transaction_type
+    if datum:
+        item.ocr_date = datum
+    if bedrag:
+        item.ocr_amount = _parse_amount_draft(bedrag)
+    item.ocr_description = omschrijving.strip() or None
+    item.ocr_invoice_number = factuurnummer_leverancier.strip() or None
+    if category_id:
+        try:
+            cat_slug = await _category_slug(db, transaction_type, int(category_id))
+            if cat_slug:
+                item.ocr_category_suggestion = cat_slug
+        except ValueError:
+            pass
+    await db.commit()
+    return JSONResponse({"ok": True})
 
 
 # ── Goedkeuren ────────────────────────────────────────────────
@@ -195,6 +269,21 @@ async def approve_item(
     item = await db.get(ScanQueue, id)
     if not item:
         return RedirectResponse("/scan-wachtrij", status_code=302)
+
+    # Sla de ingevoerde waarden meteen op als concept op het wachtrij-item, vóórdat
+    # er wordt gevalideerd. Faalt een latere check (bijv. ongeldig bedrag), dan
+    # toont de heropgebouwde pagina hierdoor de LAATST ingevoerde waarden — niet
+    # de oorspronkelijke AI-suggestie — zodat een handmatige wijziging (zoals de
+    # categorie) nooit ongemerkt wordt teruggedraaid door een mislukte poging.
+    item.transaction_type = transaction_type
+    item.ocr_date = datum
+    item.ocr_amount = _parse_amount_draft(bedrag)
+    item.ocr_description = omschrijving.strip() or None
+    item.ocr_invoice_number = factuurnummer_leverancier.strip() or None
+    cat_slug = await _category_slug(db, transaction_type, category_id)
+    if cat_slug:
+        item.ocr_category_suggestion = cat_slug
+    await db.commit()
 
     # Valideer datum
     try:

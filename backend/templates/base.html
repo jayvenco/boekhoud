@@ -26,6 +26,23 @@
       --danger: #B85450; --danger-light: #FAEDEC;
       --success: #4A7C59; --success-light: #EEF3EB;
       --warning-bg: #FBF4E6; --warning: #9A7230;
+      --hours: #4A6FA5; --hours-light: #EAF0F8;
+
+      /* Categoriepalet: elke categorie krijgt een vaste, unieke kleur op basis
+         van haar id (id % 12), zodat elke individuele categorie herkenbaar
+         blijft — niet alleen per type (inkomsten/uitgaven/uren). */
+      --cat0-bg:#FBEAEA; --cat0:#B84C3E;
+      --cat1-bg:#FCEEE0; --cat1:#C4711C;
+      --cat2-bg:#FBF3D9; --cat2:#A6791A;
+      --cat3-bg:#F3F7DE; --cat3:#7C8C2E;
+      --cat4-bg:#E9F5EC; --cat4:#3F8657;
+      --cat5-bg:#E3F4F1; --cat5:#2C8C7A;
+      --cat6-bg:#E3F2F6; --cat6:#2F7A97;
+      --cat7-bg:#E9EFFA; --cat7:#3E62B0;
+      --cat8-bg:#ECEAFB; --cat8:#5B4FC2;
+      --cat9-bg:#F3E8F8; --cat9:#8A46A8;
+      --cat10-bg:#FBE7F1; --cat10:#B93E82;
+      --cat11-bg:#F3ECE3; --cat11:#8B6C4F;
     }
 
     /* ☀️ Licht – Mondschoon warm bruin */
@@ -49,6 +66,20 @@
       --danger:#E07570; --danger-light:#3A1A18;
       --success:#6AA87A; --success-light:#1A2E20;
       --warning-bg:#2E2410; --warning:#C49840;
+      --hours:#8FADD9; --hours-light:#1A2438;
+
+      --cat0-bg:#3A1F1D; --cat0:#E38A7D;
+      --cat1-bg:#3B2A18; --cat1:#E3A059;
+      --cat2-bg:#392F16; --cat2:#D9B85B;
+      --cat3-bg:#303420; --cat3:#C3D17A;
+      --cat4-bg:#1D3324; --cat4:#7FC79A;
+      --cat5-bg:#17332E; --cat5:#6FC4B4;
+      --cat6-bg:#17303A; --cat6:#6DBBDA;
+      --cat7-bg:#1D2740; --cat7:#8FA8E0;
+      --cat8-bg:#241E3F; --cat8:#A79AE8;
+      --cat9-bg:#331E3B; --cat9:#C48BDD;
+      --cat10-bg:#3A1E2E; --cat10:#E38AC0;
+      --cat11-bg:#2E2620; --cat11:#C4A882;
     }
 
     /* 🌿 Groen – Salie */
@@ -91,6 +122,7 @@
       --shadow:0 1px 12px rgba(13,30,58,0.10);
       --danger:#C0392B; --danger-light:#FAEAE8;
       --success:#1E7A4A; --success-light:#E8F5EE;
+      --hours:#8B5FA8; --hours-light:#F3ECF8;
     }
 
     body {
@@ -624,6 +656,9 @@
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         Uitloggen
       </a>
+      <div style="padding:10px 12px 4px;font-size:11px;color:var(--mid);opacity:0.6;text-align:center;">
+        {{ request.state.app_branch }} · {{ request.state.app_version }}
+      </div>
     </div>
   </aside>
   {% endif %}

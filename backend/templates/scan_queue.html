@@ -121,7 +121,7 @@
         <div class="form-group" style="margin:0;">
           <label>Type</label>
           <select name="transaction_type" id="type-{{ item.id }}"
-                  onchange="switchCats({{ item.id }}, this.value); autoInvoiceNumberScan({{ item.id }})">
+                  onchange="switchCats({{ item.id }}, this.value); autoInvoiceNumberScan({{ item.id }}); saveDraft({{ item.id }})">
             <option value="uitgave" {% if item.transaction_type == 'uitgave' %}selected{% endif %}>Uitgave</option>
             <option value="inkomst" {% if item.transaction_type == 'inkomst' %}selected{% endif %}>Inkomst</option>
           </select>
@@ -137,7 +137,7 @@
 
         <div class="form-group" style="margin:0;">
           <label>Bedrag (€)</label>
-          <input type="text" name="bedrag" required
+          <input type="text" name="bedrag" id="bedrag-{{ item.id }}" required
                  value="{{ '%.2f'|format(item.ocr_amount) if item.ocr_amount else '' }}"
                  placeholder="0.00">
         </div>
@@ -161,7 +161,7 @@
         <div class="form-group" style="margin:0;" id="inc-cat-{{ item.id }}"
              {% if item.transaction_type != 'inkomst' %}style="display:none;margin:0;"{% endif %}>
           <label>Categorie (inkomst)</label>
-          <select name="category_id_inc" id="inc-cat-sel-{{ item.id }}">
+          <select name="category_id_inc" id="inc-cat-sel-{{ item.id }}" onchange="saveDraft({{ item.id }})">
             {% for cat in inc_cats %}
             <option value="{{ cat.id }}"
               {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() in cat.slug %}selected{% endif %}>
@@ -175,7 +175,7 @@
         <div class="form-group" style="margin:0;" id="exp-cat-{{ item.id }}"
              {% if item.transaction_type != 'uitgave' %}style="display:none;margin:0;"{% endif %}>
           <label>Categorie (uitgave)</label>
-          <select name="category_id_exp" id="exp-cat-sel-{{ item.id }}">
+          <select name="category_id_exp" id="exp-cat-sel-{{ item.id }}" onchange="saveDraft({{ item.id }})">
             {% for cat in exp_cats %}
             <option value="{{ cat.id }}"
               {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() in cat.slug %}selected{% endif %}>
@@ -201,7 +201,7 @@
       <!-- Omschrijving (hidden field) — submit correct category_id based on type -->
       <div style="margin-top:12px;">
         <label style="font-size:13px;color:var(--mid);">Omschrijving</label>
-        <input type="text" name="omschrijving"
+        <input type="text" name="omschrijving" id="omschrijving-{{ item.id }}"
                value="{{ item.default_description or item.ocr_description or '' }}"
                placeholder="Optioneel"
                style="margin-top:4px;">
@@ -250,6 +250,32 @@ function autoInvoiceNumberScan(id) {
       updateFactuurnummerBadge(id);
     })
     .catch(() => {});
+}
+
+// Slaat de huidige waarden van één item direct op de server op, zodat een
+// goedkeuring van een ANDER item (die de hele pagina herlaadt) deze wijziging
+// niet ongedaan maakt door terug te vallen op de oorspronkelijke AI-suggestie.
+function saveDraft(id) {
+  const typeSel = document.getElementById('type-' + id);
+  if (!typeSel) return;
+  const type = typeSel.value;
+  const catSel = type === 'inkomst'
+    ? document.getElementById('inc-cat-sel-' + id)
+    : document.getElementById('exp-cat-sel-' + id);
+  const datumField = document.getElementById('datum-' + id);
+  const bedragField = document.getElementById('bedrag-' + id);
+  const omschrijvingField = document.getElementById('omschrijving-' + id);
+  const leverancierField = document.getElementById('leverancier-' + id);
+
+  const fd = new FormData();
+  fd.append('transaction_type', type);
+  fd.append('datum', datumField ? datumField.value : '');
+  fd.append('bedrag', bedragField ? bedragField.value : '');
+  fd.append('category_id', catSel ? catSel.value : '');
+  fd.append('omschrijving', omschrijvingField ? omschrijvingField.value : '');
+  fd.append('factuurnummer_leverancier', leverancierField ? leverancierField.value : '');
+
+  fetch(`/scan-wachtrij/${id}/concept`, { method: 'POST', body: fd }).catch(() => {});
 }
 
 function switchCats(id, type) {

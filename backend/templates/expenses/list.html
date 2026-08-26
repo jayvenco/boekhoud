@@ -122,7 +122,7 @@
           {% if e.supplier_invoice_number %}<div style="font-weight:400;font-size:11px;color:var(--mid);">Orig.: {{ e.supplier_invoice_number }}</div>{% endif %}
         </td>
         <td>{{ e.date.strftime("%d-%m-%Y") }}</td>
-        <td><span class="badge badge-neutral">{{ e.category.name }}</span></td>
+        <td><span class="badge" style="background:var(--cat{{ e.category.id % 12 }}-bg);color:var(--cat{{ e.category.id % 12 }})">{{ e.category.name }}</span></td>
         <td style="color:var(--light-text)">{{ e.description[:40] if e.description else "—" }}</td>
         <td class="amount amount-negative">€ {{ "%.2f"|format(e.amount) }}</td>
         <td>
