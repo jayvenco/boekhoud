@@ -29,21 +29,32 @@
 <!-- Upload sectie -->
 <div class="card" style="margin-bottom:24px;">
   <div class="section-title" style="margin-bottom:16px;">Bestanden uploaden & inscannen</div>
-  <form method="post" action="/scan-wachtrij/upload" enctype="multipart/form-data">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;">
-      <div class="form-group" style="margin:0;">
-        <label>Afbeeldingen / PDF's</label>
-        <input type="file" name="bestanden" multiple accept=".jpg,.jpeg,.png,.pdf" required>
-        <div style="font-size:12px;color:var(--mid);margin-top:4px;">Meerdere bestanden tegelijk selecteren is mogelijk</div>
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label>Type transactie</label>
-        <select name="transaction_type" required>
-          <option value="uitgave">Uitgave (bon / factuur)</option>
-          <option value="inkomst">Inkomst (betaalbewijs / factuur)</option>
-        </select>
-      </div>
+  <form method="post" action="/scan-wachtrij/upload" enctype="multipart/form-data" id="upload-form">
+    <div class="form-group" style="margin:0 0 16px;">
+      <label>Type transactie</label>
+      <select name="transaction_type" required style="max-width:320px;">
+        <option value="uitgave">Uitgave (bon / factuur)</option>
+        <option value="inkomst">Inkomst (betaalbewijs / factuur)</option>
+      </select>
     </div>
+
+    <label for="dropzone-input">Afbeeldingen / PDF's</label>
+    <div id="dropzone"
+         style="margin-top:6px;border:2px dashed var(--border);border-radius:var(--radius);
+                padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .15s, background .15s;
+                background:var(--cream);">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--warm-gray)" stroke-width="1.6" style="margin-bottom:10px;">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div id="dropzone-text" style="font-size:14px;color:var(--dark);font-weight:600;">
+        Sleep bonnen/facturen hierheen, of klik om te bladeren
+      </div>
+      <div style="font-size:12px;color:var(--mid);margin-top:4px;">JPG, PNG of PDF — meerdere bestanden tegelijk mogelijk</div>
+      <input type="file" name="bestanden" id="dropzone-input" multiple accept=".jpg,.jpeg,.png,.pdf" required
+             style="display:none;">
+    </div>
+    <div id="dropzone-filelist" style="margin-top:10px;font-size:13px;color:var(--mid);"></div>
+
     <div style="margin-top:16px;">
       <button type="submit" class="btn btn-primary">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -222,6 +233,61 @@
 {% endif %}
 
 <script>
+// ── Sleep-en-neerzet upload-zone ────────────────────────────────
+(function() {
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('dropzone-input');
+  const fileList = document.getElementById('dropzone-filelist');
+  const dropzoneText = document.getElementById('dropzone-text');
+  if (!dropzone || !fileInput) return;
+
+  function renderFileList() {
+    const files = fileInput.files;
+    if (!files || files.length === 0) {
+      fileList.textContent = '';
+      dropzoneText.textContent = 'Sleep bonnen/facturen hierheen, of klik om te bladeren';
+      return;
+    }
+    dropzoneText.textContent = `${files.length} bestand${files.length !== 1 ? 'en' : ''} geselecteerd`;
+    const names = Array.from(files).map(f => f.name);
+    fileList.innerHTML = '📎 ' + names.join(', &nbsp;📎 ');
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  ['dragenter', 'dragover'].forEach(evt => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.style.borderColor = 'var(--green)';
+      dropzone.style.background = 'var(--green-pale)';
+    });
+  });
+
+  ['dragleave', 'dragend'].forEach(evt => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.style.borderColor = 'var(--border)';
+      dropzone.style.background = 'var(--cream)';
+    });
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropzone.style.borderColor = 'var(--border)';
+    dropzone.style.background = 'var(--cream)';
+    const dropped = e.dataTransfer.files;
+    if (dropped && dropped.length > 0) {
+      fileInput.files = dropped;
+      renderFileList();
+    }
+  });
+
+  fileInput.addEventListener('change', renderFileList);
+})();
+
 const AUTO_NUMBERING_ENABLED = {{ auto_numbering_enabled | tojson }};
 
 function updateFactuurnummerBadge(id) {
