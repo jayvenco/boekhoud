@@ -34,6 +34,23 @@ def _scan_path(filename: str) -> Path:
     return SCAN_DIR / filename
 
 
+def _parse_amount_draft(bedrag: str) -> Optional[float]:
+    """Best-effort parse voor het concept-veld — geeft None terug bij een
+    ongeldige waarde in plaats van te crashen; de echte validatie gebeurt apart."""
+    try:
+        return float(bedrag.replace(",", "."))
+    except (ValueError, AttributeError):
+        return None
+
+
+async def _category_slug(db: AsyncSession, transaction_type: str, category_id: int) -> Optional[str]:
+    """Zoekt de slug op van de gekozen categorie, zodat die bij een heropgebouwde
+    pagina opnieuw als 'geselecteerd' wordt herkend (zie ocr_category_suggestion)."""
+    model = IncomeCategory if transaction_type == "inkomst" else ExpenseCategory
+    cat = await db.get(model, category_id)
+    return cat.slug if cat else None
+
+
 def _build_description(invoice_number, date_str, amount, ai_description=None) -> str:
     """Standaard omschrijving: begint met de door AI herkende artikelomschrijving,
     gevolgd door datum en bedrag, en eindigt met het originele factuurnummer."""
@@ -195,6 +212,21 @@ async def approve_item(
     item = await db.get(ScanQueue, id)
     if not item:
         return RedirectResponse("/scan-wachtrij", status_code=302)
+
+    # Sla de ingevoerde waarden meteen op als concept op het wachtrij-item, vóórdat
+    # er wordt gevalideerd. Faalt een latere check (bijv. ongeldig bedrag), dan
+    # toont de heropgebouwde pagina hierdoor de LAATST ingevoerde waarden — niet
+    # de oorspronkelijke AI-suggestie — zodat een handmatige wijziging (zoals de
+    # categorie) nooit ongemerkt wordt teruggedraaid door een mislukte poging.
+    item.transaction_type = transaction_type
+    item.ocr_date = datum
+    item.ocr_amount = _parse_amount_draft(bedrag)
+    item.ocr_description = omschrijving.strip() or None
+    item.ocr_invoice_number = factuurnummer_leverancier.strip() or None
+    cat_slug = await _category_slug(db, transaction_type, category_id)
+    if cat_slug:
+        item.ocr_category_suggestion = cat_slug
+    await db.commit()
 
     # Valideer datum
     try:
