@@ -27,6 +27,16 @@ def year_filter(model, year: int):
     return func.strftime("%Y", model.date) == str(year)
 
 
+# Een afschrijfbare aankoop bestaat uit twee soorten rijen: de oorspronkelijke
+# inkoopregel (is_depreciable=True, volledig aankoopbedrag — puur voor
+# administratie/bonnen) en losse jaarlijkse afschrijvingsregels
+# (invoice_number eindigend op -AFW<jaar>, is_depreciable=False). Alleen de
+# afschrijvingsregels horen mee te tellen als 'uitgave' in een jaar; de
+# inkoopregel zelf NIET, anders wordt het volledige aankoopbedrag dubbel
+# geteld (eenmaal als losse aankoop, eenmaal verspreid via de afschrijving).
+NOT_DEPRECIABLE_PURCHASE = Expense.is_depreciable.isnot(True)
+
+
 
 def calc_depreciation_for_year(dep, year: int) -> float:
     start_year = dep.start_date.year
@@ -91,7 +101,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     total_income = inc_result.scalar() or 0
 
     exp_result = await db.execute(
-        select(func.sum(Expense.amount)).where(year_filter(Expense, year))
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
     )
     total_expenses = exp_result.scalar() or 0
 
@@ -124,7 +134,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         select(
             func.strftime("%m", Expense.date).label("month"),
             func.sum(Expense.amount).label("total")
-        ).where(year_filter(Expense, year))
+        ).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
         .group_by(func.strftime("%m", Expense.date))
         .order_by(func.strftime("%m", Expense.date))
     )
@@ -153,7 +163,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     exp_by_cat = await db.execute(
         select(ExpenseCategory.name, func.sum(Expense.amount).label("total"))
         .join(Expense, Expense.category_id == ExpenseCategory.id)
-        .where(year_filter(Expense, year))
+        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
         .group_by(ExpenseCategory.name)
         .order_by(func.sum(Expense.amount).desc())
     )
@@ -206,14 +216,14 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
     exp_by_cat = await db.execute(
         select(ExpenseCategory.name, func.sum(Expense.amount).label("total"))
         .join(Expense, Expense.category_id == ExpenseCategory.id)
-        .where(year_filter(Expense, year))
+        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
         .group_by(ExpenseCategory.name)
     )
     inc_total = await db.execute(
         select(func.sum(Income.amount)).where(year_filter(Income, year))
     )
     exp_total = await db.execute(
-        select(func.sum(Expense.amount)).where(year_filter(Expense, year))
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
     )
 
     dep_result = await db.execute(
@@ -273,7 +283,7 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
         select(
             func.strftime("%m", Expense.date).label("month"),
             func.sum(Expense.amount).label("total")
-        ).where(year_filter(Expense, year))
+        ).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
         .group_by(func.strftime("%m", Expense.date))
     )
     all_inc = await db.execute(
@@ -316,7 +326,7 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
     exp_by_cat = await db.execute(
         select(ExpenseCategory.name, func.sum(Expense.amount).label("total"))
         .join(Expense, Expense.category_id == ExpenseCategory.id)
-        .where(year_filter(Expense, year))
+        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
         .group_by(ExpenseCategory.name)
     )
     unpaid = await db.execute(
@@ -443,7 +453,7 @@ async def export_yearly(request: Request, db: AsyncSession = Depends(get_db)):
     )
     monthly_exp = await db.execute(
         select(func.strftime("%m", Expense.date).label("month"), func.sum(Expense.amount).label("total"))
-        .where(year_filter(Expense, year)).group_by(func.strftime("%m", Expense.date))
+        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE).group_by(func.strftime("%m", Expense.date))
     )
     inc_by_month = {int(r.month): float(r.total) for r in monthly_inc}
     exp_by_month = {int(r.month): float(r.total) for r in monthly_exp}
@@ -491,7 +501,7 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
     expenses = expenses_q.scalars().all()
 
     total_income = sum(i.amount for i in incomes)
-    total_expenses = sum(e.amount for e in expenses)
+    total_expenses = sum(e.amount for e in expenses if not e.is_depreciable)
 
     month_names = ["Januari","Februari","Maart","April","Mei","Juni",
                    "Juli","Augustus","September","Oktober","November","December"]
@@ -553,6 +563,8 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
         inc_by_m[i.date.month] = inc_by_m.get(i.date.month, 0) + i.amount
     exp_by_m = {}
     for e in expenses:
+        if e.is_depreciable:
+            continue
         exp_by_m[e.date.month] = exp_by_m.get(e.date.month, 0) + e.amount
     cumulative = 0
     for m in range(1, 13):
@@ -585,6 +597,8 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
                            inc_by_cat.get(key, (0, 0))[1] + 1)
     exp_by_cat = {}
     for e in expenses:
+        if e.is_depreciable:
+            continue
         key = e.category.name if e.category else "Onbekend"
         exp_by_cat[key] = (exp_by_cat.get(key, (0, 0))[0] + e.amount,
                            exp_by_cat.get(key, (0, 0))[1] + 1)
@@ -620,7 +634,7 @@ async def export_yearly_pdf(request: Request, db: AsyncSession = Depends(get_db)
     )
     monthly_exp = await db.execute(
         select(func.strftime("%m", Expense.date).label("month"), func.sum(Expense.amount).label("total"))
-        .where(year_filter(Expense, year)).group_by(func.strftime("%m", Expense.date))
+        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE).group_by(func.strftime("%m", Expense.date))
     )
     inc_by_month = {int(r.month): float(r.total) for r in monthly_inc}
     exp_by_month = {int(r.month): float(r.total) for r in monthly_exp}

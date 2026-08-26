@@ -14,7 +14,7 @@
 
 {% block content %}
 {% set total = namespace(val=0) %}
-{% for e in expenses %}{% set total.val = total.val + e.amount %}{% endfor %}
+{% for e in expenses %}{% if not e.is_depreciable %}{% set total.val = total.val + e.amount %}{% endif %}{% endfor %}
 
 <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px;">
   <div class="stat-card expense">
