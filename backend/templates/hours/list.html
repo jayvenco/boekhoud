@@ -102,7 +102,7 @@
       {% for e in entries %}
       <tr>
         <td>{{ e.date.strftime("%d-%m-%Y") }}</td>
-        <td><span class="badge badge-neutral">{{ e.category.name }}</span></td>
+        <td><span class="badge badge-cat-hours">{{ e.category.name }}</span></td>
         <td style="font-weight:500;color:var(--dark)">{{ "%.1f"|format(e.hours) }}</td>
         <td style="color:var(--light-text)">{{ e.description[:60] if e.description else "—" }}</td>
         <td>

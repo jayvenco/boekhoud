@@ -26,6 +26,7 @@
       --danger: #B85450; --danger-light: #FAEDEC;
       --success: #4A7C59; --success-light: #EEF3EB;
       --warning-bg: #FBF4E6; --warning: #9A7230;
+      --hours: #4A6FA5; --hours-light: #EAF0F8;
     }
 
     /* ☀️ Licht – Mondschoon warm bruin */
@@ -49,6 +50,7 @@
       --danger:#E07570; --danger-light:#3A1A18;
       --success:#6AA87A; --success-light:#1A2E20;
       --warning-bg:#2E2410; --warning:#C49840;
+      --hours:#8FADD9; --hours-light:#1A2438;
     }
 
     /* 🌿 Groen – Salie */
@@ -91,6 +93,7 @@
       --shadow:0 1px 12px rgba(13,30,58,0.10);
       --danger:#C0392B; --danger-light:#FAEAE8;
       --success:#1E7A4A; --success-light:#E8F5EE;
+      --hours:#8B5FA8; --hours-light:#F3ECF8;
     }
 
     body {
@@ -359,6 +362,12 @@
     .badge-warning { background: var(--warning-bg);    color: var(--warning); }
     .badge-danger  { background: var(--danger-light);  color: var(--danger);  }
     .badge-neutral { background: var(--beige);         color: var(--mid);     }
+
+    /* Categoriebadges: één vaste kleur per type (inkomsten/uitgaven/uren),
+       overal in de app, zodat je in één oogopslag het type herkent. */
+    .badge-cat-income  { background: var(--success-light); color: var(--success); }
+    .badge-cat-expense { background: var(--danger-light);  color: var(--danger);  }
+    .badge-cat-hours   { background: var(--hours-light);   color: var(--hours);   }
 
     /* ── Forms ── */
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; }
