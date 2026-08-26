@@ -151,7 +151,7 @@ async def get_stats(
 
     exp_result = await db.execute(
         select(func.sum(Expense.amount), func.count(Expense.id))
-        .where(func.strftime("%Y", Expense.date) == str(year))
+        .where(func.strftime("%Y", Expense.date) == str(year), Expense.is_depreciable.isnot(True))
     )
     exp_total, exp_count = exp_result.one()
 

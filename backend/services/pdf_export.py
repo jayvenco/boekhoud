@@ -199,7 +199,7 @@ def generate_expenses_pdf(expenses, company_name="", filters_desc="") -> BytesIO
     story = []
     _header(story, "Uitgaven Overzicht", company_name, filters_desc)
 
-    total = sum(e.amount for e in expenses)
+    total = sum(e.amount for e in expenses if not e.is_depreciable)
     dep   = sum(e.amount for e in expenses if e.is_depreciable)
 
     summary = Table(

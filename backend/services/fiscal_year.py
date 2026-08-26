@@ -35,7 +35,8 @@ async def get_year_stats(db: AsyncSession, year: int) -> dict:
 
     exp = await db.execute(
         select(func.sum(Expense.amount), func.count(Expense.id)).where(
-            func.strftime("%Y", Expense.date) == str(year)
+            func.strftime("%Y", Expense.date) == str(year),
+            Expense.is_depreciable.isnot(True),
         )
     )
     exp_row = exp.one()
