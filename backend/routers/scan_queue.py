@@ -8,6 +8,9 @@ from pathlib import Path
 import uuid
 import shutil
 import os
+import logging
+
+logger = logging.getLogger("boekhoud.scan_queue")
 
 from backend.models.database import get_db
 from backend.models.models import (
@@ -119,71 +122,78 @@ async def upload_and_scan(
     batch_invoices: dict[str, str] = {}     # origineel factuurnr -> bestandsnaam (binnen deze upload)
 
     for bestand in bestanden:
-        if not bestand.filename:
-            continue
-        ext = Path(bestand.filename).suffix.lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            continue
-
-        content = await bestand.read()
-        if not content or len(content) > 10 * 1024 * 1024:
-            continue
-
-        file_hash = compute_hash(content)
-        safe_name = f"{uuid.uuid4().hex}{ext}"
-        file_path = SCAN_DIR / safe_name
-        file_path.write_bytes(content)
-
         try:
-            result = await process_receipt(str(file_path), db)
-        except Exception as e:
-            result = {"error": str(e)}
+            if not bestand.filename:
+                continue
+            ext = Path(bestand.filename).suffix.lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                continue
 
-        # Normaliseer de door AI herkende datum (vaak DD-MM-YYYY) naar ISO-formaat
-        # (YYYY-MM-DD), zodat het <input type="date"> veld correct vult en de
-        # automatische factuurnummering op basis van het jaartal kan starten.
-        ocr_date_iso = None
-        raw_ocr_date = result.get("date")
-        if raw_ocr_date:
+            content = await bestand.read()
+            if not content or len(content) > 10 * 1024 * 1024:
+                continue
+
+            file_hash = compute_hash(content)
+            safe_name = f"{uuid.uuid4().hex}{ext}"
+            file_path = SCAN_DIR / safe_name
+            file_path.write_bytes(content)
+
             try:
-                ocr_date_iso = parse_date_inc(str(raw_ocr_date)).isoformat()
-            except ValueError:
-                ocr_date_iso = None
+                result = await process_receipt(str(file_path), db)
+            except Exception as e:
+                logger.error(f"OCR-verwerking mislukt voor '{bestand.filename}': {type(e).__name__}: {e}")
+                result = {"error": f"Uitlezen mislukt ({type(e).__name__}). Vul de gegevens handmatig in."}
 
-        ocr_invoice = result.get("invoice_number")
+            # Normaliseer de door AI herkende datum (vaak DD-MM-YYYY) naar ISO-formaat
+            # (YYYY-MM-DD), zodat het <input type="date"> veld correct vult en de
+            # automatische factuurnummering op basis van het jaartal kan starten.
+            ocr_date_iso = None
+            raw_ocr_date = result.get("date")
+            if raw_ocr_date:
+                try:
+                    ocr_date_iso = parse_date_inc(str(raw_ocr_date)).isoformat()
+                except ValueError:
+                    ocr_date_iso = None
 
-        # Duplicaatdetectie: eerst binnen deze upload-batch, dan tegen bestaande records.
-        warning = None
-        if file_hash in batch_hashes:
-            warning = f"Zelfde bestand zit ook in deze upload ({batch_hashes[file_hash]})."
-        elif ocr_invoice and str(ocr_invoice).strip() in batch_invoices:
-            warning = (f"Origineel factuurnummer '{ocr_invoice}' zit ook in deze upload "
-                       f"({batch_invoices[str(ocr_invoice).strip()]}).")
-        else:
-            warning = await find_duplicate(
-                db, file_hash=file_hash, invoice_number=ocr_invoice,
-                amount=result.get("amount"), date_str=ocr_date_iso,
+            ocr_invoice = result.get("invoice_number")
+
+            # Duplicaatdetectie: eerst binnen deze upload-batch, dan tegen bestaande records.
+            warning = None
+            if file_hash in batch_hashes:
+                warning = f"Zelfde bestand zit ook in deze upload ({batch_hashes[file_hash]})."
+            elif ocr_invoice and str(ocr_invoice).strip() in batch_invoices:
+                warning = (f"Origineel factuurnummer '{ocr_invoice}' zit ook in deze upload "
+                           f"({batch_invoices[str(ocr_invoice).strip()]}).")
+            else:
+                warning = await find_duplicate(
+                    db, file_hash=file_hash, invoice_number=ocr_invoice,
+                    amount=result.get("amount"), date_str=ocr_date_iso,
+                )
+
+            batch_hashes.setdefault(file_hash, bestand.filename)
+            if ocr_invoice and str(ocr_invoice).strip():
+                batch_invoices.setdefault(str(ocr_invoice).strip(), bestand.filename)
+
+            item = ScanQueue(
+                filename=safe_name,
+                original_filename=bestand.filename,
+                transaction_type=transaction_type,
+                file_hash=file_hash,
+                duplicate_warning=warning,
+                ocr_date=ocr_date_iso,
+                ocr_amount=result.get("amount"),
+                ocr_description=result.get("description"),
+                ocr_invoice_number=ocr_invoice,
+                ocr_category_suggestion=result.get("category_suggestion"),
+                ocr_error=result.get("error") or result.get("_ai_error"),
             )
-
-        batch_hashes.setdefault(file_hash, bestand.filename)
-        if ocr_invoice and str(ocr_invoice).strip():
-            batch_invoices.setdefault(str(ocr_invoice).strip(), bestand.filename)
-
-        item = ScanQueue(
-            filename=safe_name,
-            original_filename=bestand.filename,
-            transaction_type=transaction_type,
-            file_hash=file_hash,
-            duplicate_warning=warning,
-            ocr_date=ocr_date_iso,
-            ocr_amount=result.get("amount"),
-            ocr_description=result.get("description"),
-            ocr_invoice_number=ocr_invoice,
-            ocr_category_suggestion=result.get("category_suggestion"),
-            ocr_error=result.get("error") or result.get("_ai_error"),
-        )
-        db.add(item)
-        count += 1
+            db.add(item)
+            count += 1
+        except Exception as e:
+            # Eén beschadigd of onverwacht bestand mag de rest van de bulk-upload
+            # nooit laten crashen — sla over, log het, en ga door met de volgende.
+            logger.error(f"Verwerking van '{getattr(bestand, 'filename', '?')}' overgeslagen: {type(e).__name__}: {e}")
+            continue
 
     await db.commit()
     return RedirectResponse(f"/scan-wachtrij?uploaded={count}", status_code=302)
