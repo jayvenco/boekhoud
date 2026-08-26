@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Form, Depends, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -197,6 +197,53 @@ async def upload_and_scan(
 
     await db.commit()
     return RedirectResponse(f"/scan-wachtrij?uploaded={count}", status_code=302)
+
+
+# ── Concept opslaan (live, per veldwijziging) ──────────────────
+#
+# De scan-wachtrij toont meerdere items op één pagina. Zolang wijzigingen
+# (zoals een handmatig gekozen categorie) alleen in de browser leven, gaan ze
+# verloren zodra een ANDER item wordt goedgekeurd — dat stuurt de hele pagina
+# naar de server en terug, en de server kent alleen wat al is opgeslagen. Dit
+# endpoint slaat elke wijziging direct op zodra de gebruiker 'm maakt, zodat
+# een goedkeuring van item A de nog-openstaande wijzigingen van item B, C, ...
+# niet meer terugzet naar de oorspronkelijke AI-suggestie.
+@router.post("/{id}/concept")
+async def save_draft(
+    id: int,
+    request: Request,
+    transaction_type: str = Form(...),
+    datum: str = Form(""),
+    bedrag: str = Form(""),
+    category_id: str = Form(""),
+    omschrijving: str = Form(""),
+    factuurnummer_leverancier: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "niet ingelogd"}, status_code=401)
+
+    item = await db.get(ScanQueue, id)
+    if not item:
+        return JSONResponse({"ok": False, "error": "niet gevonden"}, status_code=404)
+
+    item.transaction_type = transaction_type
+    if datum:
+        item.ocr_date = datum
+    if bedrag:
+        item.ocr_amount = _parse_amount_draft(bedrag)
+    item.ocr_description = omschrijving.strip() or None
+    item.ocr_invoice_number = factuurnummer_leverancier.strip() or None
+    if category_id:
+        try:
+            cat_slug = await _category_slug(db, transaction_type, int(category_id))
+            if cat_slug:
+                item.ocr_category_suggestion = cat_slug
+        except ValueError:
+            pass
+    await db.commit()
+    return JSONResponse({"ok": True})
 
 
 # ── Goedkeuren ────────────────────────────────────────────────
