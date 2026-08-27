@@ -6,6 +6,9 @@ from reportlab.lib.units import cm
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.charts.barcharts import VerticalBarChart, HorizontalBarChart
+from reportlab.graphics.charts.legends import Legend
 
 BRAND      = colors.HexColor("#8B6F4E")
 BRAND_LITE = colors.HexColor("#F5EDE3")
@@ -66,18 +69,89 @@ def _summary_style():
 
 
 def _header(story, title, company_name, filters_desc):
-    story.append(_P(title, fontName="Helvetica-Bold", fontSize=18,
+    story.append(_P(title, fontName="Helvetica-Bold", fontSize=18, leading=22,
                     textColor=BRAND, spaceAfter=3))
     if company_name:
-        story.append(_P(company_name, fontName="Helvetica", fontSize=10,
+        story.append(_P(company_name, fontName="Helvetica", fontSize=10, leading=13,
                         textColor=TEXT_LIGHT, spaceAfter=2))
     story.append(_P(f"Gegenereerd op {datetime.now().strftime('%d-%m-%Y %H:%M')}",
-                    fontName="Helvetica", fontSize=9, textColor=TEXT_LIGHT, spaceAfter=3))
+                    fontName="Helvetica", fontSize=9, leading=12, textColor=TEXT_LIGHT, spaceAfter=3))
     if filters_desc:
         story.append(_P(f"Filters: {filters_desc}",
-                        fontName="Helvetica-Oblique", fontSize=8.5,
+                        fontName="Helvetica-Oblique", fontSize=8.5, leading=11,
                         textColor=TEXT_LIGHT, spaceAfter=4))
     story.append(Spacer(1, 0.35 * cm))
+
+
+def _monthly_chart(inc_by_month, exp_by_month, month_names) -> Drawing:
+    """Gegroepeerde staafdiagram inkomsten vs. uitgaven per maand."""
+    inc_data = [inc_by_month.get(m, 0) for m in range(1, 13)]
+    exp_data = [exp_by_month.get(m, 0) for m in range(1, 13)]
+    max_val = max(inc_data + exp_data + [1])
+
+    d = Drawing(680, 190)
+    chart = VerticalBarChart()
+    chart.x = 35
+    chart.y = 25
+    chart.width = 560
+    chart.height = 140
+    chart.data = [inc_data, exp_data]
+    chart.categoryAxis.categoryNames = [m[:3] for m in month_names]
+    chart.categoryAxis.labels.fontSize = 7
+    chart.categoryAxis.labels.fillColor = TEXT_LIGHT
+    chart.valueAxis.labels.fontSize = 7
+    chart.valueAxis.labels.fillColor = TEXT_LIGHT
+    chart.valueAxis.valueMin = 0
+    chart.valueAxis.valueMax = max_val * 1.15
+    chart.groupSpacing = 6
+    chart.barSpacing = 1
+    chart.bars[0].fillColor = SUCCESS
+    chart.bars[1].fillColor = DANGER
+    chart.strokeColor = None
+    d.add(chart)
+
+    legend = Legend()
+    legend.x = 610
+    legend.y = 150
+    legend.dx = 8
+    legend.dy = 8
+    legend.fontSize = 7.5
+    legend.alignment = "left"
+    legend.colorNamePairs = [(SUCCESS, "Inkomsten"), (DANGER, "Uitgaven")]
+    d.add(legend)
+    return d
+
+
+def _category_chart(cat_totals, bar_color) -> Drawing:
+    """Horizontale staafdiagram van bedrag per categorie, aflopend gesorteerd."""
+    items = sorted(cat_totals, key=lambda x: x[1], reverse=True)[:8]
+    if not items:
+        return None
+    items = list(reversed(items))
+    values = [v for _, v in items]
+    names = [n[:22] for n, _ in items]
+    max_val = max(values + [1])
+
+    height = 24 * len(items) + 30
+    d = Drawing(680, height)
+    chart = HorizontalBarChart()
+    chart.x = 110
+    chart.y = 15
+    chart.width = 480
+    chart.height = height - 30
+    chart.data = [values]
+    chart.categoryAxis.categoryNames = names
+    chart.categoryAxis.labels.fontSize = 8
+    chart.categoryAxis.labels.fillColor = TEXT
+    chart.valueAxis.labels.fontSize = 7
+    chart.valueAxis.labels.fillColor = TEXT_LIGHT
+    chart.valueAxis.valueMin = 0
+    chart.valueAxis.valueMax = max_val * 1.15
+    chart.bars[0].fillColor = bar_color
+    chart.barSpacing = 4
+    chart.strokeColor = None
+    d.add(chart)
+    return d
 
 
 def generate_incomes_pdf(incomes, company_name="", filters_desc="",
@@ -101,6 +175,17 @@ def generate_incomes_pdf(incomes, company_name="", filters_desc="",
     summary.setStyle(_summary_style())
     story.append(summary)
     story.append(Spacer(1, 0.4 * cm))
+
+    cat_totals = {}
+    for i in incomes:
+        key = i.category.name if i.category else "Onbekend"
+        cat_totals[key] = cat_totals.get(key, 0) + i.amount
+    chart = _category_chart(list(cat_totals.items()), SUCCESS)
+    if chart:
+        story.append(_P("Inkomsten per categorie", fontName="Helvetica-Bold",
+                        fontSize=10, textColor=TEXT, spaceAfter=4))
+        story.append(chart)
+        story.append(Spacer(1, 0.4 * cm))
 
     LABELS = received_via_labels or {}
     headers = ["Factuurnummer", "Datum", "Categorie", "Omschrijving",
@@ -154,6 +239,11 @@ def generate_yearly_pdf(year, inc_by_month, exp_by_month,
     s.add("TEXTCOLOR", (2, 1), (2, 1), SUCCESS if balance >= 0 else DANGER)
     summary.setStyle(s)
     story.append(summary)
+    story.append(Spacer(1, 0.4*cm))
+
+    story.append(_P("Inkomsten & uitgaven per maand", fontName="Helvetica-Bold",
+                    fontSize=10, textColor=TEXT, spaceAfter=4))
+    story.append(_monthly_chart(inc_by_month, exp_by_month, month_names))
     story.append(Spacer(1, 0.4*cm))
 
     headers = ["Maand", "Inkomsten (€)", "Uitgaven (€)", "Winst/Verlies (€)", "Cumulatief (€)"]
@@ -213,6 +303,19 @@ def generate_expenses_pdf(expenses, company_name="", filters_desc="") -> BytesIO
     story.append(summary)
     story.append(Spacer(1, 0.4 * cm))
 
+    cat_totals = {}
+    for e in expenses:
+        if e.is_depreciable:
+            continue
+        key = e.category.name if e.category else "Onbekend"
+        cat_totals[key] = cat_totals.get(key, 0) + e.amount
+    chart = _category_chart(list(cat_totals.items()), DANGER)
+    if chart:
+        story.append(_P("Uitgaven per categorie", fontName="Helvetica-Bold",
+                        fontSize=10, textColor=TEXT, spaceAfter=4))
+        story.append(chart)
+        story.append(Spacer(1, 0.4 * cm))
+
     headers = ["Factuurnummer", "Datum", "Categorie", "Omschrijving", "Bedrag (€)", "Afschr."]
     rows = [headers]
     for e in expenses:
@@ -265,6 +368,11 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
     story.append(summary)
     story.append(Spacer(1, 0.4*cm))
 
+    story.append(_P("Inkomsten & uitgaven per maand", fontName="Helvetica-Bold",
+                    fontSize=10, textColor=TEXT, spaceAfter=4))
+    story.append(_monthly_chart(inc_by_month, exp_by_month, month_names))
+    story.append(Spacer(1, 0.4*cm))
+
     headers = ["Maand", "Inkomsten (€)", "Uitgaven (€)", "Winst/Verlies (€)", "Cumulatief (€)"]
     rows = [headers]
     cumulative = 0
@@ -305,6 +413,17 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
     story.append(summary)
     story.append(Spacer(1, 0.4*cm))
 
+    inc_cat_totals = {}
+    for i in incomes:
+        key = i.category.name if i.category else "Onbekend"
+        inc_cat_totals[key] = inc_cat_totals.get(key, 0) + i.amount
+    chart = _category_chart(list(inc_cat_totals.items()), SUCCESS)
+    if chart:
+        story.append(_P("Inkomsten per categorie", fontName="Helvetica-Bold",
+                        fontSize=10, textColor=TEXT, spaceAfter=4))
+        story.append(chart)
+        story.append(Spacer(1, 0.4*cm))
+
     LABELS = received_via_labels or {}
     headers = ["Factuurnummer", "Datum", "Categorie", "Omschrijving", "Bedrag (€)", "Status", "Ontvangen op"]
     rows = [headers]
@@ -338,6 +457,19 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
     summary.setStyle(s)
     story.append(summary)
     story.append(Spacer(1, 0.4*cm))
+
+    exp_cat_totals = {}
+    for e in expenses:
+        if e.is_depreciable:
+            continue
+        key = e.category.name if e.category else "Onbekend"
+        exp_cat_totals[key] = exp_cat_totals.get(key, 0) + e.amount
+    chart = _category_chart(list(exp_cat_totals.items()), DANGER)
+    if chart:
+        story.append(_P("Uitgaven per categorie", fontName="Helvetica-Bold",
+                        fontSize=10, textColor=TEXT, spaceAfter=4))
+        story.append(chart)
+        story.append(Spacer(1, 0.4*cm))
 
     headers = ["Factuurnummer", "Datum", "Categorie", "Omschrijving", "Bedrag (€)", "Afschr."]
     rows = [headers]
