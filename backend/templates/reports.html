@@ -118,6 +118,37 @@
   {% else %}<div class="empty-state"><p>Geen uren geregistreerd in {{ year }}</p></div>{% endif %}
 </div>
 
+<div class="card" style="margin-bottom:28px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <div class="section-title" style="margin-bottom:0;">Gereden kilometers per maand</div>
+    <a href="/kilometers" class="btn btn-outline btn-sm">Naar kilometerregistratie</a>
+  </div>
+  <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px;">
+    <div class="stat-card">
+      <div class="stat-label">Totaal km {{ year }}</div>
+      <div class="stat-value">{{ "%.1f"|format(total_km) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Totaal bedrag {{ year }}</div>
+      <div class="stat-value amount">€ {{ "%.2f"|format(total_km_amount) }}</div>
+    </div>
+  </div>
+  {% if total_km %}
+  <table>
+    <thead><tr><th>Maand</th><th>Km</th><th>Bedrag</th></tr></thead>
+    <tbody>
+      {% for r in km_rows %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td class="amount">{{ "%.1f"|format(r.km) }}</td>
+        <td class="amount">€ {{ "%.2f"|format(r.amount) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="empty-state"><p>Geen kilometers geregistreerd in {{ year }}</p></div>{% endif %}
+</div>
+
 {% if depreciations %}
 <div class="card">
   <div class="section-title" style="margin-bottom:4px;">Afschrijvingsoverzicht</div>

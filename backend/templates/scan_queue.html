@@ -142,7 +142,7 @@
           <label>Datum</label>
           <input type="date" name="datum" id="datum-{{ item.id }}" required
                  value="{{ item.ocr_date | replace('-', '-') if item.ocr_date else '' }}"
-                 onchange="autoInvoiceNumberScan({{ item.id }})"
+                 onchange="autoInvoiceNumberScan({{ item.id }}); saveDraft({{ item.id }})"
                  placeholder="YYYY-MM-DD">
         </div>
 
@@ -150,6 +150,7 @@
           <label>Bedrag (€)</label>
           <input type="text" name="bedrag" id="bedrag-{{ item.id }}" required
                  value="{{ '%.2f'|format(item.ocr_amount) if item.ocr_amount else '' }}"
+                 onchange="saveDraft({{ item.id }})"
                  placeholder="0.00">
         </div>
 
@@ -165,6 +166,7 @@
           <label for="leverancier-{{ item.id }}">Factuurnummer origineel</label>
           <input type="text" name="factuurnummer_leverancier" id="leverancier-{{ item.id }}"
                  value="{{ item.ocr_invoice_number or '' }}"
+                 onchange="saveDraft({{ item.id }})"
                  placeholder="Origineel nummer op de bon/factuur">
         </div>
 
@@ -214,6 +216,7 @@
         <label style="font-size:13px;color:var(--mid);">Omschrijving</label>
         <input type="text" name="omschrijving" id="omschrijving-{{ item.id }}"
                value="{{ item.default_description or item.ocr_description or '' }}"
+               onchange="saveDraft({{ item.id }})"
                placeholder="Optioneel"
                style="margin-top:4px;">
       </div>
