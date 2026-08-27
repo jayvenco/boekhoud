@@ -13,6 +13,7 @@ from backend.services.invoice_numbering import get_numbering_settings, get_next_
 from backend.services.fiscal_year import is_year_locked, get_locked_years
 from backend.services.pdf_export import generate_incomes_pdf
 from backend.services.i18n import t
+from backend.services.sorting import sort_url
 from datetime import date, datetime
 from typing import Optional, List
 import csv
@@ -21,6 +22,7 @@ import io
 router = APIRouter(prefix="/inkomsten")
 templates = Jinja2Templates(directory="backend/templates")
 templates.env.globals["t"] = t
+templates.env.globals["sort_url"] = sort_url
 
 # Standaardopties voor "Ontvangen op". Nieuwe optie toevoegen = één regel hier
 # + één <option> in het formulier.
@@ -91,7 +93,7 @@ def _apply_income_filters(query, q, from_date, to_date, category_id, year,
         except ValueError:
             pass
     if contact:
-        query = query.join(Income.category).where(or_(
+        query = query.where(or_(
             IncomeCategory.contact_firstname.ilike(f"%{contact}%"),
             IncomeCategory.contact_lastname.ilike(f"%{contact}%"),
             IncomeCategory.email.ilike(f"%{contact}%"),
@@ -100,20 +102,33 @@ def _apply_income_filters(query, q, from_date, to_date, category_id, year,
     return query
 
 
+INCOME_SORT_COLUMNS = {
+    "date": Income.date,
+    "amount": Income.amount,
+    "invoice_number": Income.invoice_number,
+}
+
+
 @router.get("", response_class=HTMLResponse)
 async def list_incomes(
     request: Request, db: AsyncSession = Depends(get_db),
     q: str = "", from_date: str = "", to_date: str = "",
     category_id: str = "", year: str = "",
     min_amount: str = "", max_amount: str = "", contact: str = "",
+    sort: str = "date", dir: str = "desc",
 ):
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
         return user
-    query = select(Income).options(
+    query = select(Income).join(Income.category).options(
         selectinload(Income.category),
         selectinload(Income.receipts)
-    ).order_by(Income.date.desc())
+    )
+    if sort == "category":
+        sort_col = IncomeCategory.name
+    else:
+        sort_col = INCOME_SORT_COLUMNS.get(sort, Income.date)
+    query = query.order_by(sort_col.desc() if dir == "desc" else sort_col.asc())
     query = _apply_income_filters(query, q, from_date, to_date, category_id,
                                   year, min_amount, max_amount, contact)
     result = await db.execute(query)
@@ -127,7 +142,7 @@ async def list_incomes(
         "incomes": incomes, "categories": cats.scalars().all(),
         "received_via_labels": RECEIVED_VIA_OPTIONS,
         "locked_years": locked_years,
-        "filters": filters,
+        "filters": filters, "sort": sort, "dir": dir,
         "active_filters": sum(1 for v in filters.values() if v),
     })
 
@@ -142,7 +157,7 @@ async def export_incomes_pdf(
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
         return user
-    query = select(Income).options(
+    query = select(Income).join(Income.category).options(
         selectinload(Income.category),
         selectinload(Income.receipts)
     ).order_by(Income.date.desc())
@@ -587,3 +602,56 @@ async def delete_income(id: int, request: Request, db: AsyncSession = Depends(ge
         await db.delete(income)
         await db.commit()
     return RedirectResponse("/inkomsten", status_code=302)
+
+
+@router.post("/bulk-verwijderen")
+async def bulk_delete_incomes(request: Request, db: AsyncSession = Depends(get_db), ids: List[int] = Form([])):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not ids:
+        return RedirectResponse("/inkomsten", status_code=302)
+
+    result = await db.execute(
+        select(Income).options(selectinload(Income.receipts)).where(Income.id.in_(ids))
+    )
+    incomes = result.scalars().all()
+    locked_years = await get_locked_years(db)
+    skipped = 0
+    for income in incomes:
+        if income.date.year in locked_years:
+            skipped += 1
+            continue
+        for r in income.receipts:
+            delete_file(r.file_path)
+        if income.receipt_path:
+            delete_file(income.receipt_path)
+        await db.delete(income)
+    await db.commit()
+    suffix = "&error=vergrendeld" if skipped else ""
+    return RedirectResponse(f"/inkomsten?bulk_deleted={len(incomes) - skipped}{suffix}", status_code=302)
+
+
+@router.post("/bulk-categorie")
+async def bulk_update_income_category(request: Request, db: AsyncSession = Depends(get_db),
+                                       ids: List[int] = Form([]), category_id: int = Form(...)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not ids:
+        return RedirectResponse("/inkomsten", status_code=302)
+
+    result = await db.execute(select(Income).where(Income.id.in_(ids)))
+    incomes = result.scalars().all()
+    locked_years = await get_locked_years(db)
+    updated = 0
+    skipped = 0
+    for income in incomes:
+        if income.date.year in locked_years:
+            skipped += 1
+            continue
+        income.category_id = category_id
+        updated += 1
+    await db.commit()
+    suffix = "&error=vergrendeld" if skipped else ""
+    return RedirectResponse(f"/inkomsten?bulk_updated={updated}{suffix}", status_code=302)

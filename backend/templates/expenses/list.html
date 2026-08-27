@@ -13,6 +13,18 @@
 {% endblock %}
 
 {% block content %}
+{% set bulk_deleted = request.query_params.get('bulk_deleted') %}
+{% set bulk_updated = request.query_params.get('bulk_updated') %}
+{% if bulk_deleted %}
+<div class="alert alert-success" style="margin-bottom:16px;">✓ {{ bulk_deleted }} regel(s) verwijderd.</div>
+{% endif %}
+{% if bulk_updated %}
+<div class="alert alert-success" style="margin-bottom:16px;">✓ Categorie aangepast voor {{ bulk_updated }} regel(s).</div>
+{% endif %}
+{% if request.query_params.get('error') == 'vergrendeld' %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Sommige regels vallen in een afgesloten boekjaar en zijn overgeslagen.</div>
+{% endif %}
+
 {% set total = namespace(val=0) %}
 {% for e in expenses %}{% if not e.is_depreciable %}{% set total.val = total.val + e.amount %}{% endif %}{% endfor %}
 
@@ -95,18 +107,42 @@
   </form>
 </div>
 
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count"><span id="bulkCount">0</span> geselecteerd</span>
+  <select id="bulkCategorySelect">
+    {% for cat in categories %}
+    <option value="{{ cat.id }}">{{ cat.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="button" class="btn btn-outline btn-sm" onclick="submitBulkCategory()">Wijzig categorie</button>
+  <button type="button" class="btn btn-danger btn-sm" onclick="submitBulkDelete()">Verwijder geselecteerd</button>
+  <button type="button" class="btn btn-outline btn-sm" onclick="clearBulkSelection()">Annuleren</button>
+</div>
+<form id="bulkDeleteForm" method="post" action="/uitgaven/bulk-verwijderen" style="display:none;"></form>
+<form id="bulkCategoryForm" method="post" action="/uitgaven/bulk-categorie" style="display:none;"></form>
+
 <div class="table-wrap">
   {% if expenses %}
   <table>
     <thead>
       <tr>
-        <th>Factuurnummer</th><th>Datum</th><th>Categorie</th>
-        <th>Omschrijving</th><th>Bedrag</th><th>Afschr.</th><th>{{ t('receipt_table_header') }}</th><th></th>
+        <th style="width:36px;"><input type="checkbox" class="row-check" id="selectAll" onchange="toggleSelectAll(this)"></th>
+        <th class="sortable"><a href="{{ sort_url(request, sort, dir, 'invoice_number') }}">Factuurnummer{% if sort == 'invoice_number' %}<span class="sort-arrow">{{ '▲' if dir == 'asc' else '▼' }}</span>{% endif %}</a></th>
+        <th class="sortable"><a href="{{ sort_url(request, sort, dir, 'date') }}">Datum{% if sort == 'date' %}<span class="sort-arrow">{{ '▲' if dir == 'asc' else '▼' }}</span>{% endif %}</a></th>
+        <th class="sortable"><a href="{{ sort_url(request, sort, dir, 'category') }}">Categorie{% if sort == 'category' %}<span class="sort-arrow">{{ '▲' if dir == 'asc' else '▼' }}</span>{% endif %}</a></th>
+        <th>Omschrijving</th>
+        <th class="sortable"><a href="{{ sort_url(request, sort, dir, 'amount') }}">Bedrag{% if sort == 'amount' %}<span class="sort-arrow">{{ '▲' if dir == 'asc' else '▼' }}</span>{% endif %}</a></th>
+        <th>Afschr.</th><th>{{ t('receipt_table_header') }}</th><th></th>
       </tr>
     </thead>
     <tbody>
       {% for e in expenses %}
       <tr>
+        <td>
+          {% if not (locked_years is defined and e.date.year in locked_years) %}
+          <input type="checkbox" class="row-check" data-id="{{ e.id }}" onchange="updateBulkBar()">
+          {% endif %}
+        </td>
         <td style="font-weight:500;color:var(--dark)">
           {{ e.invoice_number }}
           {% if "-AFW" in e.invoice_number %}
@@ -189,6 +225,59 @@ function toggleFilters() {
   const visible = form.style.display !== 'none';
   form.style.display = visible ? 'none' : 'block';
   btn.textContent = visible ? 'Toon filters' : 'Verberg filters';
+}
+
+function getRowChecks() {
+  return Array.from(document.querySelectorAll('.row-check[data-id]'));
+}
+function getCheckedIds() {
+  return getRowChecks().filter(c => c.checked).map(c => c.dataset.id);
+}
+function updateBulkBar() {
+  const ids = getCheckedIds();
+  const bar = document.getElementById('bulkBar');
+  document.getElementById('bulkCount').textContent = ids.length;
+  bar.classList.toggle('active', ids.length > 0);
+  const all = getRowChecks();
+  const selectAll = document.getElementById('selectAll');
+  if (selectAll) selectAll.checked = all.length > 0 && ids.length === all.length;
+}
+function toggleSelectAll(cb) {
+  getRowChecks().forEach(c => { c.checked = cb.checked; });
+  updateBulkBar();
+}
+function clearBulkSelection() {
+  getRowChecks().forEach(c => { c.checked = false; });
+  const selectAll = document.getElementById('selectAll');
+  if (selectAll) selectAll.checked = false;
+  updateBulkBar();
+}
+function fillIdsInto(form, ids) {
+  form.querySelectorAll('input[name="ids"]').forEach(i => i.remove());
+  ids.forEach(id => {
+    const input = document.createElement('input');
+    input.type = 'hidden'; input.name = 'ids'; input.value = id;
+    form.appendChild(input);
+  });
+}
+function submitBulkDelete() {
+  const ids = getCheckedIds();
+  if (!ids.length) return;
+  if (!confirm(`${ids.length} regel(s) verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+  const form = document.getElementById('bulkDeleteForm');
+  fillIdsInto(form, ids);
+  form.submit();
+}
+function submitBulkCategory() {
+  const ids = getCheckedIds();
+  if (!ids.length) return;
+  const categoryId = document.getElementById('bulkCategorySelect').value;
+  const form = document.getElementById('bulkCategoryForm');
+  fillIdsInto(form, ids);
+  const catInput = document.createElement('input');
+  catInput.type = 'hidden'; catInput.name = 'category_id'; catInput.value = categoryId;
+  form.appendChild(catInput);
+  form.submit();
 }
 </script>
 {% endblock %}
