@@ -13,6 +13,7 @@ from backend.services.i18n import t
 from backend.services.invoice_numbering import get_numbering_settings
 from backend.services.fiscal_year import is_year_locked, get_locked_years
 from backend.services.pdf_export import generate_expenses_pdf
+from backend.services.sorting import sort_url
 from datetime import date, datetime
 import calendar
 from typing import Optional, List
@@ -20,6 +21,7 @@ from typing import Optional, List
 router = APIRouter(prefix="/uitgaven")
 templates = Jinja2Templates(directory="backend/templates")
 templates.env.globals["t"] = t
+templates.env.globals["sort_url"] = sort_url
 
 # Aantal occurrences dat 12 maanden vooruit gegenereerd wordt, per frequentie.
 # Nieuwe frequenties toevoegen = één regel hier + één <option> in het formulier.
@@ -155,12 +157,20 @@ def _apply_expense_filters(query, q, from_date, to_date, category_id, year,
     return query
 
 
+EXPENSE_SORT_COLUMNS = {
+    "date": Expense.date,
+    "amount": Expense.amount,
+    "invoice_number": Expense.invoice_number,
+}
+
+
 @router.get("", response_class=HTMLResponse)
 async def list_expenses(
     request: Request, db: AsyncSession = Depends(get_db),
     q: str = "", from_date: str = "", to_date: str = "",
     category_id: str = "", year: str = "",
     min_amount: str = "", max_amount: str = "", contact: str = "",
+    sort: str = "date", dir: str = "desc",
 ):
     user = await require_auth(request, db)
     if isinstance(user, RedirectResponse):
@@ -169,7 +179,13 @@ async def list_expenses(
         selectinload(Expense.category),
         selectinload(Expense.depreciation),
         selectinload(Expense.receipts)
-    ).order_by(Expense.date.desc())
+    )
+    if sort == "category":
+        query = query.join(ExpenseCategory, Expense.category_id == ExpenseCategory.id)
+        sort_col = ExpenseCategory.name
+    else:
+        sort_col = EXPENSE_SORT_COLUMNS.get(sort, Expense.date)
+    query = query.order_by(sort_col.desc() if dir == "desc" else sort_col.asc())
     query = _apply_expense_filters(query, q, from_date, to_date, category_id,
                                    year, min_amount, max_amount, contact)
     result = await db.execute(query)
@@ -182,7 +198,7 @@ async def list_expenses(
     return templates.TemplateResponse(request, "expenses/list.html", {
         "expenses": expenses, "categories": cats.scalars().all(),
         "today": date.today(), "locked_years": locked_years,
-        "filters": filters,
+        "filters": filters, "sort": sort, "dir": dir,
         "active_filters": sum(1 for v in filters.values() if v),
     })
 
@@ -596,6 +612,33 @@ async def delete_receipt(id: int, receipt_id: int, request: Request, db: AsyncSe
     return RedirectResponse(f"/uitgaven/{id}/bewerken", status_code=302)
 
 
+async def _delete_expense_full(db: AsyncSession, expense: Expense):
+    """Verwijdert een uitgave inclusief bonnen, afschrijvingsregels en toekomstige
+    terugkerende occurrences. Slaat NIET de fiscal-year-lockcheck of commit over —
+    die blijven verantwoordelijkheid van de aanroeper."""
+    for r in expense.receipts:
+        delete_file(r.file_path)
+    if expense.receipt_path:
+        delete_file(expense.receipt_path)
+    if expense.depreciation:
+        await db.delete(expense.depreciation)
+    old_deps = await db.execute(select(Expense).where(Expense.invoice_number.like(f"{expense.invoice_number}-AFW%")))
+    for old_dep in old_deps.scalars().all():
+        await db.delete(old_dep)
+
+    if expense.is_recurring and not expense.is_auto_generated:
+        today = date.today()
+        future = await db.execute(select(Expense).where(
+            Expense.parent_recurring_expense_id == expense.id,
+            Expense.is_auto_generated == True,
+            Expense.date > today,
+        ))
+        for f in future.scalars().all():
+            await db.delete(f)
+
+    await db.delete(expense)
+
+
 @router.post("/{id}/verwijderen")
 async def delete_expense(id: int, request: Request, db: AsyncSession = Depends(get_db)):
     user = await require_auth(request, db)
@@ -609,26 +652,56 @@ async def delete_expense(id: int, request: Request, db: AsyncSession = Depends(g
     if expense and await is_year_locked(db, expense.date.year):
         return RedirectResponse("/uitgaven?error=vergrendeld", status_code=302)
     if expense:
-        for r in expense.receipts:
-            delete_file(r.file_path)
-        if expense.receipt_path:
-            delete_file(expense.receipt_path)
-        if expense.depreciation:
-            await db.delete(expense.depreciation)
-        old_deps = await db.execute(select(Expense).where(Expense.invoice_number.like(f"{expense.invoice_number}-AFW%")))
-        for old_dep in old_deps.scalars().all():
-            await db.delete(old_dep)
-
-        if expense.is_recurring and not expense.is_auto_generated:
-            today = date.today()
-            future = await db.execute(select(Expense).where(
-                Expense.parent_recurring_expense_id == expense.id,
-                Expense.is_auto_generated == True,
-                Expense.date > today,
-            ))
-            for f in future.scalars().all():
-                await db.delete(f)
-
-        await db.delete(expense)
+        await _delete_expense_full(db, expense)
         await db.commit()
     return RedirectResponse("/uitgaven", status_code=302)
+
+
+@router.post("/bulk-verwijderen")
+async def bulk_delete_expenses(request: Request, db: AsyncSession = Depends(get_db), ids: List[int] = Form([])):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not ids:
+        return RedirectResponse("/uitgaven", status_code=302)
+
+    result = await db.execute(
+        select(Expense).options(selectinload(Expense.depreciation), selectinload(Expense.receipts))
+        .where(Expense.id.in_(ids))
+    )
+    expenses = result.scalars().all()
+    locked_years = await get_locked_years(db)
+    skipped = 0
+    for expense in expenses:
+        if expense.date.year in locked_years:
+            skipped += 1
+            continue
+        await _delete_expense_full(db, expense)
+    await db.commit()
+    suffix = "&error=vergrendeld" if skipped else ""
+    return RedirectResponse(f"/uitgaven?{('bulk_deleted=' + str(len(expenses) - skipped))}{suffix}", status_code=302)
+
+
+@router.post("/bulk-categorie")
+async def bulk_update_category(request: Request, db: AsyncSession = Depends(get_db),
+                                ids: List[int] = Form([]), category_id: int = Form(...)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not ids:
+        return RedirectResponse("/uitgaven", status_code=302)
+
+    result = await db.execute(select(Expense).where(Expense.id.in_(ids)))
+    expenses = result.scalars().all()
+    locked_years = await get_locked_years(db)
+    updated = 0
+    skipped = 0
+    for expense in expenses:
+        if expense.date.year in locked_years:
+            skipped += 1
+            continue
+        expense.category_id = category_id
+        updated += 1
+    await db.commit()
+    suffix = "&error=vergrendeld" if skipped else ""
+    return RedirectResponse(f"/uitgaven?bulk_updated={updated}{suffix}", status_code=302)
