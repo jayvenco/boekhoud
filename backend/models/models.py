@@ -79,6 +79,7 @@ class CompanySettings(Base):
     id = Column(Integer, primary_key=True)
     company_name = Column(String(200), default="Mijn Bedrijf")
     logo_path = Column(String(500), nullable=True)
+    default_km_rate = Column(Float, default=0.23)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
@@ -121,6 +122,28 @@ class TimeEntry(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     category = relationship("HourCategory", back_populates="time_entries")
+
+
+class MileageEntry(Base):
+    __tablename__ = "mileage_entries"
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False)
+    from_location = Column(String(200), nullable=False)
+    to_location = Column(String(200), nullable=False)
+    business_purpose = Column(String(300), nullable=True)
+    km_outbound = Column(Float, nullable=False)
+    km_return = Column(Float, nullable=False, default=0.0)
+    rate = Column(Float, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    @property
+    def total_km(self):
+        return self.km_outbound + self.km_return
+
+    @property
+    def amount(self):
+        return round(self.total_km * self.rate, 2)
 
 
 class ReceivedVia(str, enum.Enum):

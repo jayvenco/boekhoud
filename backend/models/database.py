@@ -96,6 +96,16 @@ async def init_db():
         # fiscal_years & fiscal_year_audit_logs worden automatisch aangemaakt via create_all.
         # Geen extra ALTER TABLE nodig; dit zijn nieuwe tabellen.
 
+        # mileage_entries wordt automatisch aangemaakt via create_all.
+        # Standaard km-tarief voor kilometerregistratie.
+        for ddl in [
+            "ALTER TABLE company_settings ADD COLUMN default_km_rate FLOAT DEFAULT 0.23",
+        ]:
+            try:
+                await conn.exec_driver_sql(ddl)
+            except Exception:
+                pass
+
         # Uitgebreide inkomsten-categorieën: omschrijving en contactgegevens.
         for ddl in [
             "ALTER TABLE income_categories ADD COLUMN description VARCHAR(500)",

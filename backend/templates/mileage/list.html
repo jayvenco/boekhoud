@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Kilometerregistratie{% endblock %}
+{% block page_title %}Kilometerregistratie{% endblock %}
+
+{% block topbar_actions %}
+{% set qs = request.url.query %}
+<a href="/kilometers/export/csv{% if qs %}?{{ qs }}{% endif %}" class="btn btn-outline btn-sm">↓ CSV</a>
+<a href="/kilometers/nieuw" class="btn btn-primary">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  Rit registreren
+</a>
+{% endblock %}
+
+{% block content %}
+{% if error == "vergrendeld" %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Boekjaar is afgesloten — dit item kan niet worden verwijderd.</div>
+{% endif %}
+
+{% set total = namespace(km=0, bedrag=0) %}
+{% for e in entries %}
+  {% set total.km = total.km + e.total_km %}
+  {% set total.bedrag = total.bedrag + e.amount %}
+{% endfor %}
+
+<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+  <div class="stat-card">
+    <div class="stat-label">Km (huidige selectie)</div>
+    <div class="stat-value">{{ "%.1f"|format(total.km) }}</div>
+    <div class="stat-sub">{{ entries|length }} ritten</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Bedrag (huidige selectie)</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total.bedrag) }}</div>
+  </div>
+  <div class="stat-card income">
+    <div class="stat-label">Totaal {{ current_year }}</div>
+    <div class="stat-value">{{ "%.1f"|format(year_total_km) }} km</div>
+    <div class="stat-sub">€ {{ "%.2f"|format(year_total_amount) }}</div>
+  </div>
+</div>
+
+<!-- Filter paneel -->
+<div class="card" style="margin-bottom:16px;padding:16px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:{% if active_filters > 0 %}14px{% else %}0{% endif %};">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-weight:600;font-size:13px;color:var(--dark);">Filters</span>
+      {% if active_filters > 0 %}
+      <span class="badge badge-success">{{ active_filters }} actief</span>
+      {% endif %}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      {% if active_filters > 0 %}
+      <a href="/kilometers" class="btn btn-outline btn-xs">✕ Wis</a>
+      {% endif %}
+      <button type="button" onclick="toggleFilters()" class="btn btn-outline btn-xs" id="filterToggleBtn">
+        {% if active_filters > 0 %}Verberg{% else %}Toon{% endif %} filters
+      </button>
+    </div>
+  </div>
+
+  <form method="get" action="/kilometers" id="filterForm"
+        style="display:{% if active_filters > 0 %}block{% else %}none{% endif %};">
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px;">
+      <div class="form-group">
+        <label>Van datum</label>
+        <input type="date" name="from_date" value="{{ filters.from_date }}">
+      </div>
+      <div class="form-group">
+        <label>Tot datum</label>
+        <input type="date" name="to_date" value="{{ filters.to_date }}">
+      </div>
+      <div class="form-group">
+        <label>Boekjaar</label>
+        <input type="number" name="year" value="{{ filters.year }}" placeholder="2026" min="2000" max="2099">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn-primary btn-sm">Toepassen</button>
+      <a href="/kilometers" class="btn btn-outline btn-sm">Wis filters</a>
+    </div>
+  </form>
+</div>
+
+<div class="table-wrap">
+  {% if entries %}
+  <table>
+    <thead>
+      <tr>
+        <th>Datum</th><th>Van</th><th>Naar</th><th>Zakelijk doel</th>
+        <th>Km heen</th><th>Km terug</th><th>Totaal km</th><th>Tarief</th><th>Bedrag</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td>{{ e.date.strftime("%d-%m-%Y") }}</td>
+        <td>{{ e.from_location }}</td>
+        <td>{{ e.to_location }}</td>
+        <td style="color:var(--light-text)">{{ e.business_purpose or "—" }}</td>
+        <td>{{ "%.1f"|format(e.km_outbound) }}</td>
+        <td>{{ "%.1f"|format(e.km_return) }}</td>
+        <td style="font-weight:500;color:var(--dark)">{{ "%.1f"|format(e.total_km) }}</td>
+        <td>€ {{ "%.2f"|format(e.rate) }}</td>
+        <td class="amount">€ {{ "%.2f"|format(e.amount) }}</td>
+        <td>
+          {% if locked_years is defined and e.date.year in locked_years %}
+          <span class="badge badge-warning" title="Boekjaar {{ e.date.year }} is afgesloten">🔒 Alleen-lezen</span>
+          <a href="/kilometers/{{ e.id }}/bewerken" class="btn btn-outline btn-xs">Bekijken</a>
+          {% else %}
+          <div style="display:flex;gap:6px;">
+            <a href="/kilometers/{{ e.id }}/bewerken" class="btn btn-outline btn-xs">Bewerken</a>
+            <form method="post" action="/kilometers/{{ e.id }}/verwijderen" onsubmit="return confirm('Deze rit verwijderen?')">
+              <button type="submit" class="btn btn-danger btn-xs">Verwijder</button>
+            </form>
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">🚗</div>
+    {% if active_filters > 0 %}
+    <p>Geen ritten gevonden voor de ingestelde filters.</p>
+    <br><a href="/kilometers" class="btn btn-outline">Wis alle filters</a>
+    {% else %}
+    <p>Nog geen kilometers geregistreerd.</p>
+    <br><a href="/kilometers/nieuw" class="btn btn-primary">Eerste rit toevoegen</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleFilters() {
+  const form = document.getElementById('filterForm');
+  const btn = document.getElementById('filterToggleBtn');
+  const visible = form.style.display !== 'none';
+  form.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? 'Toon filters' : 'Verberg filters';
+}
+</script>
+{% endblock %}
