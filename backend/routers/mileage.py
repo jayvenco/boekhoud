@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 import csv
 import io
@@ -129,6 +129,9 @@ async def new_mileage_form(request: Request, db: AsyncSession = Depends(get_db))
     })
 
 
+MAX_HERHALINGEN = 31
+
+
 @router.post("/nieuw")
 async def create_mileage(
     request: Request,
@@ -139,6 +142,7 @@ async def create_mileage(
     km_outbound: float = Form(...),
     km_return: float = Form(0.0),
     rate: float = Form(...),
+    aantal_keer: int = Form(1),
     db: AsyncSession = Depends(get_db),
 ):
     user = await require_auth(request, db)
@@ -165,12 +169,14 @@ async def create_mileage(
             "error": "Km heen moet groter zijn dan 0.",
         })
 
-    entry = MileageEntry(
-        date=record_date, from_location=from_location.strip(), to_location=to_location.strip(),
-        business_purpose=business_purpose.strip() or None,
-        km_outbound=km_outbound, km_return=km_return or 0.0, rate=rate,
-    )
-    db.add(entry)
+    aantal_keer = max(1, min(aantal_keer or 1, MAX_HERHALINGEN))
+    for i in range(aantal_keer):
+        db.add(MileageEntry(
+            date=record_date + timedelta(days=i),
+            from_location=from_location.strip(), to_location=to_location.strip(),
+            business_purpose=business_purpose.strip() or None,
+            km_outbound=km_outbound, km_return=km_return or 0.0, rate=rate,
+        ))
     await db.commit()
     return RedirectResponse("/kilometers", status_code=302)
 
