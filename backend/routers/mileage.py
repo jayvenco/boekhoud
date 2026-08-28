@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 import csv
 import io
 
@@ -259,3 +259,25 @@ async def delete_mileage(id: int, request: Request, db: AsyncSession = Depends(g
         await db.delete(entry)
         await db.commit()
     return RedirectResponse("/kilometers", status_code=302)
+
+
+@router.post("/bulk-verwijderen")
+async def bulk_delete_mileage(request: Request, db: AsyncSession = Depends(get_db), ids: List[int] = Form([])):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not ids:
+        return RedirectResponse("/kilometers", status_code=302)
+
+    result = await db.execute(select(MileageEntry).where(MileageEntry.id.in_(ids)))
+    entries = result.scalars().all()
+    locked_years = await get_locked_years(db)
+    skipped = 0
+    for entry in entries:
+        if entry.date.year in locked_years:
+            skipped += 1
+            continue
+        await db.delete(entry)
+    await db.commit()
+    suffix = "&error=vergrendeld" if skipped else ""
+    return RedirectResponse(f"/kilometers?bulk_deleted={len(entries) - skipped}{suffix}", status_code=302)
