@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{% if entry %}Rit bewerken{% else %}Kilometers registreren{% endif %}{% endblock %}
+{% block page_title %}{% if entry %}Rit bewerken{% else %}Kilometers registreren{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/kilometers" class="btn btn-outline">← Terug</a>
+{% endblock %}
+
+{% block content %}
+{% if year_locked %}
+<div class="alert alert-error" style="display:flex;align-items:center;gap:10px;">
+  🔒 <strong>Alleen-lezen</strong> — Boekjaar {{ entry.date.year if entry else '' }} is afgesloten. Gegevens kunnen niet worden gewijzigd.
+  <a href="/boekjaren" style="margin-left:auto;color:inherit;font-weight:600;">Boekjaren beheren →</a>
+</div>
+{% elif error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card" style="max-width:720px;">
+  <form method="post">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="date">Datum *</label>
+        <input type="date" id="date" name="date" required
+               value="{{ entry.date.strftime('%Y-%m-%d') if entry else '' }}"
+               style="cursor:pointer;">
+      </div>
+      <div class="form-group">
+        <label for="business_purpose">Zakelijk doel</label>
+        <input type="text" id="business_purpose" name="business_purpose"
+               value="{{ entry.business_purpose if entry else '' }}" placeholder="bijv. Klantbezoek, cursus…">
+      </div>
+      <div class="form-group">
+        <label for="from_location">Van *</label>
+        <input type="text" id="from_location" name="from_location" required
+               value="{{ entry.from_location if entry else '' }}" placeholder="Vertrekadres of plaats">
+      </div>
+      <div class="form-group">
+        <label for="to_location">Naar *</label>
+        <input type="text" id="to_location" name="to_location" required
+               value="{{ entry.to_location if entry else '' }}" placeholder="Bestemmingsadres of plaats">
+      </div>
+      <div class="form-group">
+        <label for="km_outbound">Km heen *</label>
+        <input type="number" id="km_outbound" name="km_outbound" step="0.1" min="0.1" required
+               value="{{ entry.km_outbound if entry else '' }}" placeholder="0.0" oninput="updateCalc()">
+      </div>
+      <div class="form-group">
+        <label for="km_return">Km terug</label>
+        <input type="number" id="km_return" name="km_return" step="0.1" min="0"
+               value="{{ entry.km_return if entry else 0 }}" placeholder="0.0" oninput="updateCalc()">
+      </div>
+      <div class="form-group">
+        <label for="rate">Tarief (€/km) *</label>
+        <input type="number" id="rate" name="rate" step="0.01" min="0" required
+               value="{{ entry.rate if entry else default_rate }}" oninput="updateCalc()">
+      </div>
+      <div class="form-group">
+        <label>Bedrag</label>
+        <input type="text" id="calc_amount" disabled value="€ 0,00" style="background:var(--beige);">
+      </div>
+      {% if not entry %}
+      <div class="form-group">
+        <label for="aantal_keer">Aantal keer</label>
+        <input type="number" id="aantal_keer" name="aantal_keer" step="1" min="1" max="31" value="1">
+      </div>
+      {% endif %}
+    </div>
+    {% if not entry %}
+    <p style="font-size:12px;color:var(--light-text);margin-top:8px;">
+      Bij meer dan 1 keer worden er evenveel losse ritten aangemaakt, elk op een opeenvolgende dag vanaf de gekozen datum — handig als je dezelfde route meerdere dagen achter elkaar hebt gereden.
+    </p>
+    {% endif %}
+    <div style="margin-top:22px;display:flex;gap:12px;">
+      {% if not year_locked %}
+      <button type="submit" class="btn btn-primary">
+        {% if entry %}Wijzigingen opslaan{% else %}Rit opslaan{% endif %}
+      </button>
+      {% endif %}
+      <a href="/kilometers" class="btn btn-outline">{% if year_locked %}Terug{% else %}Annuleren{% endif %}</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function updateCalc() {
+  const heen = parseFloat(document.getElementById('km_outbound').value) || 0;
+  const terug = parseFloat(document.getElementById('km_return').value) || 0;
+  const tarief = parseFloat(document.getElementById('rate').value) || 0;
+  const aantalField = document.getElementById('aantal_keer');
+  const aantal = aantalField ? (parseInt(aantalField.value) || 1) : 1;
+  const bedrag = (heen + terug) * tarief * aantal;
+  const label = aantal > 1 ? `€ ${bedrag.toFixed(2).replace('.', ',')} (${aantal}x)` : `€ ${bedrag.toFixed(2).replace('.', ',')}`;
+  document.getElementById('calc_amount').value = label;
+}
+const aantalField = document.getElementById('aantal_keer');
+if (aantalField) aantalField.addEventListener('input', updateCalc);
+updateCalc();
+</script>
+{% endblock %}

@@ -506,6 +506,7 @@ async def settings_page(
 async def update_settings(
     request: Request,
     company_name: str = Form(...),
+    default_km_rate: float = Form(0.23),
     logo: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db)
 ):
@@ -519,6 +520,7 @@ async def update_settings(
         db.add(settings)
 
     settings.company_name = company_name
+    settings.default_km_rate = default_km_rate
 
     if logo and logo.filename:
         logo_dir = UPLOAD_ROOT / "logo"

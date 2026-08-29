@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+{% block page_title %}Logs{% endblock %}
+
+{% block topbar_actions %}
+<form method="get" action="/logs" style="display:flex;align-items:center;gap:8px;">
+  <select name="bestand" onchange="this.form.submit()" style="padding:8px 12px;border:1px solid var(--stone);border-radius:8px;font-size:13px;background:white;">
+    {% for f in files %}
+    <option value="{{ f }}" {% if f == selected %}selected{% endif %}>{{ f }}</option>
+    {% endfor %}
+  </select>
+  <select name="niveau" onchange="this.form.submit()" style="padding:8px 12px;border:1px solid var(--stone);border-radius:8px;font-size:13px;background:white;">
+    {% for value, label in levels %}
+    <option value="{{ value }}" {% if value == niveau %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</form>
+<a href="/logs/export?bestand={{ selected }}" class="btn btn-outline btn-sm">↓ Exporteren</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="padding:0;overflow:hidden;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mid);">
+      <span id="liveDot" style="width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;"></span>
+      Automatisch verversen elke 10 seconden
+    </div>
+    <div style="font-size:12px;color:var(--light-text);" id="lastUpdated">—</div>
+  </div>
+  <pre id="logContent" style="margin:0;padding:16px;max-height:70vh;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.6;color:var(--dark);background:var(--cream);white-space:pre-wrap;word-break:break-word;">{{ content if content else "Geen logregels gevonden" + (" in " + selected if selected else "") + (" voor niveau " + niveau if niveau else "") + "." }}</pre>
+</div>
+
+<script>
+const selectedFile = {{ selected | tojson }};
+const selectedLevel = {{ niveau | tojson }};
+const logEl = document.getElementById('logContent');
+const lastUpdatedEl = document.getElementById('lastUpdated');
+const liveDot = document.getElementById('liveDot');
+
+function formatTime() {
+  return new Date().toLocaleTimeString('nl-NL');
+}
+
+async function refreshLogs() {
+  if (!selectedFile || !logEl) return;
+  try {
+    const params = new URLSearchParams({ bestand: selectedFile, niveau: selectedLevel || '' });
+    const res = await fetch(`/logs/data?${params}`);
+    if (!res.ok) throw new Error('fout bij ophalen');
+    const text = await res.text();
+    const wasAtBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+    logEl.textContent = text || 'Geen logregels gevonden.';
+    if (wasAtBottom) logEl.scrollTop = logEl.scrollHeight;
+    lastUpdatedEl.textContent = 'Laatst ververst: ' + formatTime();
+    liveDot.style.background = 'var(--success)';
+  } catch (e) {
+    liveDot.style.background = 'var(--danger)';
+  }
+}
+
+if (logEl) {
+  logEl.scrollTop = logEl.scrollHeight;
+  lastUpdatedEl.textContent = 'Laatst ververst: ' + formatTime();
+  setInterval(refreshLogs, 10000);
+}
+</script>
+{% endblock %}

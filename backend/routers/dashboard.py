@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from backend.models.database import get_db
-from backend.models.models import Income, Expense, ExpenseCategory, IncomeCategory, Depreciation, ChecklistItem, YearClosure, FiscalYear, TimeEntry, HourCategory
+from backend.models.models import Income, Expense, ExpenseCategory, IncomeCategory, Depreciation, ChecklistItem, YearClosure, FiscalYear, TimeEntry, HourCategory, MileageEntry
 from backend.routers.auth import require_auth
 from backend.routers.checklist import get_checklist_summary
 from backend.routers.hours import URENCRITERIUM_UREN
@@ -248,6 +248,26 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
     )
     total_hours = hours_total_result.scalar() or 0.0
 
+    km_total_col = MileageEntry.km_outbound + MileageEntry.km_return
+    km_by_month = await db.execute(
+        select(
+            func.strftime("%m", MileageEntry.date).label("month"),
+            func.sum(km_total_col).label("total_km"),
+            func.sum(km_total_col * MileageEntry.rate).label("total_amount"),
+        ).where(year_filter(MileageEntry, year))
+        .group_by(func.strftime("%m", MileageEntry.date))
+    )
+    km_by_month_dict = {int(r.month): (float(r.total_km), float(r.total_amount)) for r in km_by_month}
+    month_names_short = ["Januari","Februari","Maart","April","Mei","Juni",
+                         "Juli","Augustus","September","Oktober","November","December"]
+    km_rows = [
+        {"name": month_names_short[m - 1], "km": km_by_month_dict.get(m, (0, 0))[0],
+         "amount": km_by_month_dict.get(m, (0, 0))[1]}
+        for m in range(1, 13)
+    ]
+    total_km = sum(r["km"] for r in km_rows)
+    total_km_amount = sum(r["amount"] for r in km_rows)
+
     return templates.TemplateResponse(request, "reports.html", {
         "year": year,
         "years": list(range(2022, datetime.now().year + 2)),
@@ -262,6 +282,9 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
         "total_hours": total_hours,
         "urencriterium": URENCRITERIUM_UREN,
         "urencriterium_pct": min(100, round(total_hours / URENCRITERIUM_UREN * 100)) if URENCRITERIUM_UREN else 0,
+        "km_rows": km_rows,
+        "total_km": total_km,
+        "total_km_amount": total_km_amount,
     })
 
 
