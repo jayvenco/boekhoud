@@ -143,7 +143,7 @@
     <div class="login-form-wrap">
       <div class="login-box">
         <div class="form-logo">{% set _clogo = request.state.settings.logo_path if request.state.settings and request.state.settings.logo_path else None %}<img src="{% if _clogo %}/uploads/logo/{{ _clogo.split('/')[-1] }}{% else %}/static/logo.png{% endif %}" alt="Bedrijfslogo"></div>
-        <div class="login-logo">BoekHouding</div>
+        <div class="login-logo">BoekHoud</div>
         <div class="login-tagline">Log in om verder te gaan</div>
         {% if error %}
         <div class="alert">{{ error }}</div>
