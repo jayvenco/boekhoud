@@ -9,6 +9,11 @@
     <option value="{{ f }}" {% if f == selected %}selected{% endif %}>{{ f }}</option>
     {% endfor %}
   </select>
+  <select name="niveau" onchange="this.form.submit()" style="padding:8px 12px;border:1px solid var(--stone);border-radius:8px;font-size:13px;background:white;">
+    {% for value, label in levels %}
+    <option value="{{ value }}" {% if value == niveau %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
 </form>
 <a href="/logs/export?bestand={{ selected }}" class="btn btn-outline btn-sm">↓ Exporteren</a>
 {% endblock %}
@@ -22,18 +27,12 @@
     </div>
     <div style="font-size:12px;color:var(--light-text);" id="lastUpdated">—</div>
   </div>
-  {% if content %}
-  <pre id="logContent" style="margin:0;padding:16px;max-height:70vh;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.6;color:var(--dark);background:var(--cream);white-space:pre-wrap;word-break:break-word;">{{ content }}</pre>
-  {% else %}
-  <div class="empty-state">
-    <div class="empty-state-icon">📄</div>
-    <p>Geen logregels gevonden{% if selected %} in {{ selected }}{% endif %}.</p>
-  </div>
-  {% endif %}
+  <pre id="logContent" style="margin:0;padding:16px;max-height:70vh;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.6;color:var(--dark);background:var(--cream);white-space:pre-wrap;word-break:break-word;">{{ content if content else "Geen logregels gevonden" + (" in " + selected if selected else "") + (" voor niveau " + niveau if niveau else "") + "." }}</pre>
 </div>
 
 <script>
 const selectedFile = {{ selected | tojson }};
+const selectedLevel = {{ niveau | tojson }};
 const logEl = document.getElementById('logContent');
 const lastUpdatedEl = document.getElementById('lastUpdated');
 const liveDot = document.getElementById('liveDot');
@@ -45,11 +44,12 @@ function formatTime() {
 async function refreshLogs() {
   if (!selectedFile || !logEl) return;
   try {
-    const res = await fetch(`/logs/data?bestand=${encodeURIComponent(selectedFile)}`);
+    const params = new URLSearchParams({ bestand: selectedFile, niveau: selectedLevel || '' });
+    const res = await fetch(`/logs/data?${params}`);
     if (!res.ok) throw new Error('fout bij ophalen');
     const text = await res.text();
     const wasAtBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
-    logEl.textContent = text;
+    logEl.textContent = text || 'Geen logregels gevonden.';
     if (wasAtBottom) logEl.scrollTop = logEl.scrollHeight;
     lastUpdatedEl.textContent = 'Laatst ververst: ' + formatTime();
     liveDot.style.background = 'var(--success)';
