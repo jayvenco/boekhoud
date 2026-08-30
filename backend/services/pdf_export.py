@@ -1,5 +1,6 @@
 from io import BytesIO
 from datetime import datetime
+from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import cm
@@ -21,6 +22,17 @@ BORDER     = colors.HexColor("#E2D9CE")
 WHITE      = colors.white
 
 _P = lambda text, **kw: Paragraph(text, ParagraphStyle('x', **kw))
+
+_CELL_STYLE = ParagraphStyle('cell', fontName='Helvetica', fontSize=8, leading=10, textColor=TEXT)
+
+
+def _wrap_cell(text, max_len=500):
+    """Tekst voor een tabelcel die binnen de kolombreedte moet afbreken (bijv.
+    een omschrijving) in plaats van over te lopen in de volgende kolom —
+    reportlab breekt alleen af binnen Paragraph-objecten, niet bij platte
+    strings in een Table."""
+    text = (text or "")[:max_len]
+    return Paragraph(escape(text), _CELL_STYLE)
 
 
 def _tbl_style(has_footer=False):
@@ -198,7 +210,7 @@ def generate_incomes_pdf(incomes, company_name="", filters_desc="",
             i.invoice_number or "",
             i.date.strftime("%d-%m-%Y"),
             i.category.name if i.category else "—",
-            (i.description or "")[:55],
+            _wrap_cell(i.description),
             f"{i.amount:,.2f}",
             "Betaald" if i.status == "betaald" else "Openstaand",
             via,
@@ -323,7 +335,7 @@ def generate_expenses_pdf(expenses, company_name="", filters_desc="") -> BytesIO
             e.invoice_number or "",
             e.date.strftime("%d-%m-%Y"),
             e.category.name if e.category else "—",
-            (e.description or "")[:65],
+            _wrap_cell(e.description),
             f"{e.amount:,.2f}",
             "Ja" if e.is_depreciable else "—",
         ])
@@ -432,7 +444,7 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
                else LABELS.get(i.received_via, i.received_via or ""))
         rows.append([
             i.invoice_number or "", i.date.strftime("%d-%m-%Y"),
-            i.category.name if i.category else "—", (i.description or "")[:55],
+            i.category.name if i.category else "—", _wrap_cell(i.description),
             f"{i.amount:,.2f}", "Betaald" if i.status == "betaald" else "Openstaand", via,
         ])
     rows.append(["", "", "", "Totaal", f"{inc_total:,.2f}", "", ""])
@@ -476,7 +488,7 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
     for e in expenses:
         rows.append([
             e.invoice_number or "", e.date.strftime("%d-%m-%Y"),
-            e.category.name if e.category else "—", (e.description or "")[:65],
+            e.category.name if e.category else "—", _wrap_cell(e.description),
             f"{e.amount:,.2f}", "Ja" if e.is_depreciable else "—",
         ])
     rows.append(["", "", "", "Totaal", f"{exp_total:,.2f}", ""])
