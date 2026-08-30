@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% block title %}Help{% endblock %}
+{% block page_title %}Help &amp; uitleg{% endblock %}
+
+{% block head %}
+<style>
+  .help-toc { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:24px; }
+  .help-toc a {
+    font-size:12.5px; padding:6px 12px; border-radius:20px;
+    background:var(--beige); color:var(--mid); text-decoration:none; border:1px solid var(--border);
+  }
+  .help-toc a:hover { background:var(--green-pale); color:var(--green); }
+
+  .help-section { margin-bottom:16px; scroll-margin-top:20px; }
+  .help-section summary {
+    cursor:pointer; list-style:none; padding:16px 18px;
+    font-weight:600; font-size:14.5px; color:var(--dark);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .help-section summary::-webkit-details-marker { display:none; }
+  .help-section summary::after {
+    content:"+"; font-size:18px; font-weight:400; color:var(--warm-gray); margin-left:12px;
+  }
+  .help-section[open] summary::after { content:"–"; }
+  .help-section .help-body { padding:0 18px 20px; font-size:13.5px; color:var(--mid); line-height:1.7; }
+  .help-body h4 { font-size:13px; color:var(--dark); margin:14px 0 6px; }
+  .help-body ul { margin:6px 0 6px 20px; }
+  .help-body li { margin-bottom:4px; }
+  .help-body table { margin:10px 0; }
+  .help-body .field-label { font-weight:600; color:var(--dark); }
+  .help-note {
+    background:var(--green-pale); border:1px solid var(--green-light); border-radius:8px;
+    padding:10px 14px; margin:10px 0; font-size:13px;
+  }
+  .help-warn {
+    background:var(--warning-bg); border:1px solid var(--warning); border-radius:8px;
+    padding:10px 14px; margin:10px 0; font-size:13px; color:var(--dark);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alert" style="background:var(--green-pale);border:1px solid var(--green-light);color:var(--mid);margin-bottom:20px;">
+  📖 Deze pagina is een mini-wiki: uitleg per functie, de belastingtechnische achtergrond en algemene boekhoud-aanbevelingen.
+  Het is bedoeld als praktische leidraad — raadpleeg bij twijfel altijd je boekhouder of de Belastingdienst, want regels en bedragen wijzigen jaarlijks.
+</div>
+
+<div class="help-toc">
+  <a href="#dashboard">Dashboard</a>
+  <a href="#inkomsten">Inkomsten</a>
+  <a href="#uitgaven">Uitgaven</a>
+  <a href="#scan">Bulk scan</a>
+  <a href="#uren">Urenregistratie</a>
+  <a href="#kilometers">Kilometerregistratie</a>
+  <a href="#jaaroverzicht">Jaaroverzicht &amp; Rapportages</a>
+  <a href="#boekjaren">Boekjaren</a>
+  <a href="#backups">Back-ups</a>
+  <a href="#checklist">Controlechecklist</a>
+  <a href="#logs">Logs</a>
+  <a href="#instellingen">Instellingen</a>
+  <a href="#belasting">Belastingtechnisch</a>
+  <a href="#aanbevelingen">Aanbevelingen</a>
+</div>
+
+<details class="help-section card" id="dashboard" open>
+  <summary>📊 Dashboard</summary>
+  <div class="help-body">
+    <p>Het dashboard toont een samenvatting van het geselecteerde boekjaar: totale inkomsten, uitgaven, winst/verlies, openstaande facturen, een maandoverzicht en de voortgang van je urencriterium.</p>
+    <h4>Waar dient dit voor?</h4>
+    <ul>
+      <li>Snel zien hoe het boekjaar er financieel voor staat, zonder rapportages te hoeven openen.</li>
+      <li>De voortgangsbalk voor het urencriterium (1.225 uur) helpt je in de gaten houden of je op schema ligt voor de ondernemersaftrek.</li>
+    </ul>
+    <p>Er is niets om in te vullen op deze pagina — alle cijfers worden automatisch berekend op basis van de ingevoerde inkomsten, uitgaven, uren en kilometers.</p>
+  </div>
+</details>
+
+<details class="help-section card" id="inkomsten">
+  <summary>💶 Inkomsten</summary>
+  <div class="help-body">
+    <p>Hier registreer je alle ontvangen of te ontvangen bedragen: behandelingen, declaraties, overige inkomsten.</p>
+    <h4>Wat vul je in bij "Nieuwe inkomst"?</h4>
+    <ul>
+      <li><span class="field-label">Factuurnummer</span> — wordt automatisch doorgenummerd per jaar; alleen aanpassen als je een eigen nummering aanhoudt.</li>
+      <li><span class="field-label">Categorie</span> — kies de praktijk/behandelcategorie zodat rapportages kloppen.</li>
+      <li><span class="field-label">Datum</span> — de factuur- of ontvangstdatum. Bepaalt in welk boekjaar de inkomst valt.</li>
+      <li><span class="field-label">Bedrag</span> — het volledige gefactureerde bedrag.</li>
+      <li><span class="field-label">Status</span> — "Betaald" of "Openstaand". Zet dit pas op "Betaald" zodra het geld daadwerkelijk binnen is; zo klopt je debiteurenoverzicht.</li>
+      <li><span class="field-label">Ontvangen op</span> — via welke rekening of welk betaalmiddel je het geld ontvangt (zakelijke rekening, SumUp, Payt, etc.) — handig bij het reconciliëren met je bankafschriften.</li>
+      <li><span class="field-label">Factuurnummer origineel</span> — invullen als je een bestaand nummer van een extern systeem/kassasysteem overneemt.</li>
+      <li><span class="field-label">Bon/factuur</span> — upload altijd het onderliggende document; dit is je bewijsstuk richting de Belastingdienst.</li>
+    </ul>
+    <div class="help-note">💡 Boek inkomsten zo snel mogelijk na het opstellen van de factuur, niet pas bij ontvangst van het geld — dat voorkomt dat je aan het einde van het jaar facturen mist.</div>
+  </div>
+</details>
+
+<details class="help-section card" id="uitgaven">
+  <summary>🧾 Uitgaven</summary>
+  <div class="help-body">
+    <p>Hier registreer je alle zakelijke kosten: materiaal, huur, abonnementen, apparatuur, reiskosten, etc.</p>
+    <h4>Wat vul je in bij "Nieuwe uitgave"?</h4>
+    <ul>
+      <li><span class="field-label">Categorie</span> — kies de kostensoort die het beste past (Praktijkinrichting, Materiaal, Marketing, Apparatuur, etc.).</li>
+      <li><span class="field-label">Datum &amp; Bedrag</span> — datum en het totaalbedrag inclusief eventuele btw op de bon.</li>
+      <li><span class="field-label">Factuurnummer origineel</span> — het nummer dat op de bon/factuur van de leverancier staat (niet je eigen boekingsnummer).</li>
+      <li><span class="field-label">Afschrijfbare investering</span> — vink dit aan bij een aanschaf die langer dan een jaar meegaat en boven een bedrag ligt dat je niet in één keer wilt afschrijven (bijv. apparatuur, meubilair). Vul dan de <em>looptijd</em> en <em>restwaarde</em> in; het systeem berekent automatisch de jaarlijkse afschrijving en genereert per jaar een aparte afschrijvingsregel.</li>
+      <li><span class="field-label">Terugkerende kosten / Abonnement</span> — vink dit aan voor vaste maandelijkse/kwartaal/jaarlijkse kosten (software, huur, verzekering). Het systeem genereert dan automatisch de toekomstige occurrences voor de komende 12 maanden.</li>
+      <li><span class="field-label">Bon uploaden</span> — verplicht bewaren; zie de bewaarplicht hieronder bij "Belastingtechnisch".</li>
+    </ul>
+    <h4>Sorteren &amp; bulkacties</h4>
+    <p>Klik op een kolomkop (Factuurnummer, Datum, Categorie, Bedrag) om te sorteren. Gebruik de selectievinkjes om meerdere regels tegelijk te verwijderen of van categorie te wijzigen.</p>
+    <div class="help-note">💡 Een afschrijfbare aankoop blijft zichtbaar als losse regel in het overzicht (voor je administratie/bewijs), maar telt niet mee in "Totale uitgaven" — alleen de jaarlijkse afschrijvingsregels tellen mee, zodat het bedrag niet dubbel wordt geboekt.</div>
+  </div>
+</details>
+
+<details class="help-section card" id="scan">
+  <summary>🔍 Bulk scan (AI Scan &amp; Herkennen)</summary>
+  <div class="help-body">
+    <p>Upload een of meerdere bonnen/facturen (foto of PDF) en laat AI automatisch het type, bedrag, datum en categorie herkennen.</p>
+    <h4>Werkwijze</h4>
+    <ul>
+      <li>Kies eerst of je inkomsten of uitgaven gaat scannen, upload de bestanden en klik op "Uploaden &amp; AI-scan starten".</li>
+      <li>Controleer per item de herkende gegevens — de AI geeft een <em>suggestie</em>, geen garantie. Corrigeer bedrag, datum, categorie of factuurnummer waar nodig.</li>
+      <li>Het systeem waarschuwt bij een mogelijk duplicaat (zelfde bedrag + datum als een bestaande boeking).</li>
+      <li>Klik per item op "✓ Goedkeuren" om het definitief te boeken, of "✕ Verwijderen" om het te negeren.</li>
+    </ul>
+    <div class="help-note">💡 Je wijzigingen aan een item worden automatisch opgeslagen zodra je een veld verlaat, ook als je daarna eerst een ánder item goedkeurt — je hoeft dus niet bang te zijn dat correcties verloren gaan.</div>
+  </div>
+</details>
+
+<details class="help-section card" id="uren">
+  <summary>⏱️ Urenregistratie</summary>
+  <div class="help-body">
+    <p>Hier houd je de uren bij die je aan je onderneming besteedt: behandelingen, administratie, reistijd, scholing, acquisitie, etc.</p>
+    <h4>Waarom is dit belangrijk?</h4>
+    <p>Voor diverse ondernemersaftrekken (zelfstandigenaftrek, startersaftrek) moet je voldoen aan het <strong>urencriterium van 1.225 uur per jaar</strong> die je besteedt aan je onderneming. Een sluitende, actuele urenregistratie is je bewijs richting de Belastingdienst bij een controle.</p>
+    <h4>Wat vul je in?</h4>
+    <ul>
+      <li><span class="field-label">Datum, Categorie, Uren</span> — registreer bij voorkeur dagelijks of wekelijks, niet achteraf in bulk aan het einde van het jaar.</li>
+      <li><span class="field-label">Omschrijving</span> — kort maar concreet (bijv. "patiëntendossiers bijwerken"), dit maakt je registratie geloofwaardiger bij een controle.</li>
+    </ul>
+    <div class="help-warn">⚠️ Tel ook indirecte uren mee: reistijd naar patiënten, administratie, offertes, nascholing en marketing tellen mee voor het urencriterium — niet alleen behandeluren.</div>
+  </div>
+</details>
+
+<details class="help-section card" id="kilometers">
+  <summary>🚗 Kilometerregistratie</summary>
+  <div class="help-body">
+    <p>Hier registreer je zakelijke ritten met eigen vervoer: Datum, Van, Naar, Zakelijk doel, Km heen, Km terug, Totaal km, Tarief en Bedrag.</p>
+    <h4>Wat vul je in?</h4>
+    <ul>
+      <li><span class="field-label">Van / Naar</span> — vertrek- en bestemmingsadres of plaatsnaam, zodat de rit herleidbaar is.</li>
+      <li><span class="field-label">Zakelijk doel</span> — waarom de rit zakelijk was (klantbezoek, cursus, materiaal ophalen). Verplicht voor een sluitende administratie.</li>
+      <li><span class="field-label">Km heen / Km terug</span> — de enkele reisafstanden; het systeem telt ze op tot het totaal.</li>
+      <li><span class="field-label">Tarief</span> — staat standaard op het ingestelde kilometertarief (in te stellen bij Instellingen), maar is per rit aan te passen.</li>
+      <li><span class="field-label">Aantal keer</span> — vul dit in als je exact dezelfde route meerdere dagen achter elkaar hebt gereden; het systeem maakt dan automatisch losse regels aan per dag (nodig voor een correcte, per-dag administratie).</li>
+    </ul>
+    <div class="help-note">💡 Deze registratie staat los van de uitgaven en telt niet automatisch mee in de uitgaventotalen of het jaaroverzicht — je neemt het jaartotaal desgewenst zelf handmatig op als zakelijke uitgave (reiskostenvergoeding) aan het einde van het jaar, of bespreekt dit met je boekhouder.</div>
+    <p>Zie "Belastingtechnisch" hieronder voor de huidige regels rond de kilometervergoeding.</p>
+  </div>
+</details>
+
+<details class="help-section card" id="jaaroverzicht">
+  <summary>📅 Jaaroverzicht &amp; Rapportages</summary>
+  <div class="help-body">
+    <p><span class="field-label">Jaaroverzicht</span> toont de maand-voor-maand resultatenrekening (inkomsten, uitgaven, winst/verlies, cumulatief) voor het gekozen boekjaar, met CSV-, Excel- en PDF-export.</p>
+    <p><span class="field-label">Rapportages</span> geeft een dieper inzicht: inkomsten/uitgaven per categorie, urenregistratie-overzicht, gereden kilometers per maand en het afschrijvingsoverzicht van je investeringen.</p>
+    <h4>PDF Jaarexport</h4>
+    <p>Deze knop genereert één PDF met daarin het volledige jaarrapport, de complete inkomstenlijst én de complete uitgavenlijst — handig om in één keer naar je boekhouder of accountant te sturen.</p>
+  </div>
+</details>
+
+<details class="help-section card" id="boekjaren">
+  <summary>📚 Boekjaren</summary>
+  <div class="help-body">
+    <p>Een boekjaar kun je <strong>afsluiten</strong> zodra de administratie compleet en gecontroleerd is (meestal na het opmaken van de jaarrekening/aangifte).</p>
+    <h4>Wat gebeurt er bij afsluiten?</h4>
+    <ul>
+      <li>Alle inkomsten, uitgaven, uren en kilometerritten in dat boekjaar worden <strong>vergrendeld</strong> (alleen-lezen) — ze kunnen niet meer gewijzigd of verwijderd worden.</li>
+      <li>Dit voorkomt dat de cijfers achteraf per ongeluk wijzigen nadat je de aangifte al hebt ingediend.</li>
+    </ul>
+    <div class="help-warn">⚠️ Sluit een boekjaar pas af als je zeker weet dat alles klopt — heropenen kan alleen handmatig via de audit-log en is bedoeld als uitzondering, niet als standaardactie.</div>
+  </div>
+</details>
+
+<details class="help-section card" id="backups">
+  <summary>💾 Back-ups</summary>
+  <div class="help-body">
+    <p>Maakt een volledige back-up (database + bonnen/facturen) die je kunt downloaden of terugzetten. Er draait ook een automatisch back-upschema op de achtergrond (in te stellen bij Instellingen).</p>
+    <div class="help-note">💡 Download periodiek een back-up naar een andere locatie (externe schijf, cloudopslag) — een back-up die alleen op dezelfde server staat, beschermt niet tegen hardwarestoringen.</div>
+  </div>
+</details>
+
+<details class="help-section card" id="checklist">
+  <summary>✅ Controlechecklist</summary>
+  <div class="help-body">
+    <p>Een lijst met terugkerende controlepunten (bijv. "alle bonnen van deze maand geüpload?", "openstaande facturen nagebeld?"). Vink items af naarmate je ze uitvoert — handig als vast maand- of kwartaalritueel voordat je de boeken "afsluit" of de btw/IB-aangifte voorbereidt.</p>
+  </div>
+</details>
+
+<details class="help-section card" id="logs">
+  <summary>📋 Logs</summary>
+  <div class="help-body">
+    <p>Technisch logboek van de applicatie (opstarten, back-ups, fouten). Vooral bedoeld voor het opsporen van technische problemen, niet voor de financiële administratie.</p>
+    <p>Filter op niveau (Info/Warning/Error/Fatal-Critical/Trace-Debug) en exporteer een logbestand als je het aan iemand moet doorsturen voor ondersteuning.</p>
+  </div>
+</details>
+
+<details class="help-section card" id="instellingen">
+  <summary>⚙️ Instellingen</summary>
+  <div class="help-body">
+    <ul>
+      <li><span class="field-label">Bedrijfsnaam &amp; logo</span> — verschijnt op facturen en PDF-exports.</li>
+      <li><span class="field-label">Standaard km-tarief</span> — het tarief dat automatisch wordt voorgesteld bij een nieuwe rit in Kilometerregistratie.</li>
+      <li><span class="field-label">Factuurnummering</span> — het formaat van automatisch gegenereerde factuurnummers voor inkomsten en uitgaven.</li>
+      <li><span class="field-label">Categorieën</span> — beheer de categorieën voor inkomsten, uitgaven en uren.</li>
+      <li><span class="field-label">Back-upinstellingen</span> — frequentie van de automatische back-up.</li>
+      <li><span class="field-label">Wachtwoord</span> — wijzig hier je inlogwachtwoord.</li>
+    </ul>
+  </div>
+</details>
+
+<details class="help-section card" id="belasting">
+  <summary>🏛️ Belastingtechnisch — de basis</summary>
+  <div class="help-body">
+    <p>Onderstaande is een <strong>algemene toelichting</strong>, geen fiscaal advies. Bedragen en percentages wijzigen jaarlijks — controleer de actuele cijfers bij de Belastingdienst of je boekhouder.</p>
+
+    <h4>Btw-vrijstelling zorgverleners</h4>
+    <p>Veel medische en paramedische diensten zijn vrijgesteld van btw (art. 11 Wet OB 1968). Dat betekent: geen btw in rekening brengen op je facturen, geen btw-aangifte over die omzet, maar ook geen btw terugvragen over je zakelijke inkopen. Verricht je óók niet-vrijgestelde diensten (bijv. cursussen, verkoop van producten), dan kan daar wél btw-plicht voor gelden — laat dit beoordelen door je boekhouder.</p>
+
+    <h4>Urencriterium &amp; ondernemersaftrek</h4>
+    <p>Om in aanmerking te komen voor de zelfstandigenaftrek (en eventueel startersaftrek) moet je minimaal <strong>1.225 uur per jaar</strong> aan je onderneming besteden, én dit moet je hoofdtijdsbesteding zijn. Een sluitende urenregistratie (zie hierboven) is je bewijslast bij een controle.</p>
+
+    <h4>Kilometervergoeding eigen vervoer</h4>
+    <p>Rijd je zakelijke kilometers met een privéauto/fiets die niet op de zaak staat, dan mag je een onbelaste kilometervergoeding als bedrijfskosten opvoeren — de standaard staat in deze app op <strong>€ 0,23 per kilometer</strong> (het wettelijke maximum, dit bedrag wordt periodiek bijgesteld). Een rit-registratie met datum, van/naar en zakelijk doel is verplicht als onderbouwing.</p>
+
+    <h4>Afschrijving van investeringen</h4>
+    <p>Bedrijfsmiddelen die langer dan een jaar meegaan (apparatuur, inrichting, computers) schrijf je meestal niet in één keer af, maar lineair over de verwachte gebruiksduur, na aftrek van de restwaarde. Deze app berekent dat automatisch zodra je een uitgave als "Afschrijfbare investering" markeert. Let op: er gelden aparte regels en een eventuele investeringsaftrek (kleinschaligheidsinvesteringsaftrek/KIA) bij grotere investeringsbedragen in een jaar.</p>
+
+    <h4>Bewaarplicht</h4>
+    <p>Je bent wettelijk verplicht je administratie — facturen, bonnen, bankafschriften, urenregistratie — <strong>minimaal 7 jaar</strong> te bewaren (voor onroerend goed geldt 10 jaar). Zorg dat je back-ups dit ook daadwerkelijk zo lang bewaren, niet alleen de laatste back-up.</p>
+
+    <h4>Boekjaar afsluiten</h4>
+    <p>Het afsluiten van een boekjaar in deze app is een administratieve vergrendeling, geen fiscale handeling — je moet nog steeds op tijd (inkomsten- of vennootschaps)belastingaangifte doen. Sluit het boekjaar bij voorkeur pas af nádat je boekhouder de jaarcijfers heeft gecontroleerd.</p>
+  </div>
+</details>
+
+<details class="help-section card" id="aanbevelingen">
+  <summary>⭐ Aanbevelingen voor je boekhouding</summary>
+  <div class="help-body">
+    <h4>Vaste routine</h4>
+    <ul>
+      <li>Boek inkomsten en uitgaven <strong>wekelijks</strong>, niet pas aan het einde van het kwartaal — dan mis je minder bonnen en klopt je debiteurenoverzicht beter.</li>
+      <li>Gebruik de Controlechecklist als vast maandritueel voordat je verder gaat.</li>
+      <li>Werk de urenregistratie bij op de dag zelf of aan het einde van de week — achteraf reconstrueren is foutgevoelig en minder overtuigend bij een controle.</li>
+    </ul>
+    <h4>Scheiding privé/zakelijk</h4>
+    <ul>
+      <li>Gebruik voor zakelijke inkomsten en uitgaven bij voorkeur een aparte (zakelijke) bankrekening, ook als je eenmanszaak dit niet wettelijk verplicht.</li>
+      <li>Boek geen privé-uitgaven in het uitgavenoverzicht, ook niet "om het recht te trekken" — dat vertroebelt je resultaat en is fiscaal niet toegestaan.</li>
+    </ul>
+    <h4>Bonnen &amp; bewijs</h4>
+    <ul>
+      <li>Upload altijd de originele bon/factuur bij de boeking, het liefst meteen bij binnenkomst (gebruik de Bulk scan-functie voor een stapel bonnen in één keer).</li>
+      <li>Een kassabon die vervaagt is over een paar maanden onleesbaar — de scan/upload in deze app is dan je enige leesbare bewijs.</li>
+    </ul>
+    <h4>Categorisering</h4>
+    <ul>
+      <li>Wees consistent in het toekennen van categorieën — dat maakt de Rapportages-pagina en je jaarcijfers pas echt bruikbaar.</li>
+      <li>Gebruik de bulk-categoriewijziging als je achteraf merkt dat een reeks boekingen in de verkeerde categorie staat.</li>
+    </ul>
+    <h4>Periodieke controle</h4>
+    <ul>
+      <li>Vergelijk maandelijks het "Openstaand"-overzicht bij Inkomsten met je bankafschrift en bel achterstallige betalers na.</li>
+      <li>Download regelmatig een back-up naar een externe locatie.</li>
+      <li>Sluit een boekjaar pas af na een laatste controleronde — zie de Controlechecklist.</li>
+    </ul>
+  </div>
+</details>
+{% endblock %}
