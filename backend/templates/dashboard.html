@@ -34,9 +34,9 @@
     <div class="stat-sub">Dit jaar</div>
   </div>
   <div class="stat-card expense">
-    <div class="stat-label">Totale uitgaven</div>
+    <div class="stat-label">Reguliere uitgaven</div>
     <div class="stat-value amount">€ {{ "%.2f"|format(total_expenses) }}</div>
-    <div class="stat-sub">Dit jaar</div>
+    <div class="stat-sub">Dit jaar · excl. huisvesting &amp; afschrijving</div>
   </div>
   <div class="stat-card {% if profit >= 0 %}income{% else %}expense{% endif %}">
     <div class="stat-label">Winst / Verlies</div>

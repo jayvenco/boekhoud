@@ -50,16 +50,16 @@
 {% endif %}
 
 <!-- KPI cards -->
-<div class="stat-grid" style="margin-bottom:28px;">
+<div class="stat-grid" style="margin-bottom:16px;">
   <div class="stat-card income">
     <div class="stat-label">Totale inkomsten</div>
     <div class="stat-value amount">€ {{ "%.2f"|format(total_income) }}</div>
     <div class="stat-sub">{{ year }}</div>
   </div>
   <div class="stat-card expense">
-    <div class="stat-label">Totale uitgaven</div>
+    <div class="stat-label">Reguliere uitgaven</div>
     <div class="stat-value amount">€ {{ "%.2f"|format(total_expenses) }}</div>
-    <div class="stat-sub">{{ year }}</div>
+    <div class="stat-sub">Excl. huisvesting &amp; afschrijving</div>
   </div>
   <div class="stat-card {% if profit >= 0 %}income{% else %}expense{% endif %}">
     <div class="stat-label">Netto resultaat</div>
@@ -70,6 +70,25 @@
     <div class="stat-label">Openstaande facturen</div>
     <div class="stat-value">{{ unpaid_invoices|length }}</div>
     <div class="stat-sub">Niet betaald</div>
+  </div>
+</div>
+
+<!-- Aparte kostenposten: huisvesting, afschrijving, kilometers -->
+<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:28px;">
+  <div class="stat-card">
+    <div class="stat-label">Huisvestingskosten</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_huisvestingskosten) }}</div>
+    <div class="stat-sub">Apart, niet in reguliere uitgaven</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Afschrijvingen</div>
+    <div class="stat-value amount">€ {{ "%.2f"|format(total_afschrijvingen) }}</div>
+    <div class="stat-sub">Apart, niet in reguliere uitgaven</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Zakelijke kilometers</div>
+    <div class="stat-value">{{ "%.1f"|format(total_km) }} km</div>
+    <div class="stat-sub"><a href="/kilometers" style="color:inherit;">Naar kilometerregistratie</a></div>
   </div>
 </div>
 
@@ -90,7 +109,7 @@
         <tr>
           <th>Maand</th>
           <th>Inkomsten</th>
-          <th>Uitgaven</th>
+          <th>Reguliere uitgaven</th>
           <th>Resultaat</th>
           <th>Cumulatief</th>
         </tr>

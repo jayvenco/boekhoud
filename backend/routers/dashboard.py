@@ -10,8 +10,14 @@ from backend.routers.auth import require_auth
 from backend.routers.checklist import get_checklist_summary
 from backend.routers.hours import URENCRITERIUM_UREN
 from backend.services.i18n import t
-from backend.services.pdf_export import generate_yearly_pdf, generate_full_year_pdf
+from backend.services.pdf_export import generate_yearly_pdf, generate_full_year_pdf, generate_rapportage_pdf
 from backend.routers.incomes import RECEIVED_VIA_OPTIONS
+from backend.services.expense_filters import (
+    regular_expense_filter as _regular_expense_filter,
+    huisvesting_filter as _huisvesting_filter,
+    huisvestingskosten_id as _huisvestingskosten_id,
+    is_afschrijving_expense as _is_afschrijving_expense,
+)
 from datetime import date, datetime
 from typing import Optional
 import csv
@@ -26,17 +32,6 @@ def year_filter(model, year: int):
     """SQLite-compatible year filter using strftime."""
     from sqlalchemy import func
     return func.strftime("%Y", model.date) == str(year)
-
-
-# Een afschrijfbare aankoop bestaat uit twee soorten rijen: de oorspronkelijke
-# inkoopregel (is_depreciable=True, volledig aankoopbedrag — puur voor
-# administratie/bonnen) en losse jaarlijkse afschrijvingsregels
-# (invoice_number eindigend op -AFW<jaar>, is_depreciable=False). Alleen de
-# afschrijvingsregels horen mee te tellen als 'uitgave' in een jaar; de
-# inkoopregel zelf NIET, anders wordt het volledige aankoopbedrag dubbel
-# geteld (eenmaal als losse aankoop, eenmaal verspreid via de afschrijving).
-NOT_DEPRECIABLE_PURCHASE = Expense.is_depreciable.isnot(True)
-
 
 
 def calc_depreciation_for_year(dep, year: int) -> float:
@@ -95,6 +90,8 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         return user
 
     year = datetime.now().year
+    regular_filter = await _regular_expense_filter(db)
+    huisvesting_filter = await _huisvesting_filter(db)
 
     inc_result = await db.execute(
         select(func.sum(Income.amount)).where(year_filter(Income, year))
@@ -102,9 +99,17 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     total_income = inc_result.scalar() or 0
 
     exp_result = await db.execute(
-        select(func.sum(Expense.amount)).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), regular_filter)
     )
     total_expenses = exp_result.scalar() or 0
+
+    huisvesting_result = await db.execute(
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), huisvesting_filter)
+    )
+    total_huisvestingskosten = huisvesting_result.scalar() or 0
+
+    dep_result = await db.execute(select(Depreciation))
+    dep_this_year = sum(calc_depreciation_for_year(d, year) for d in dep_result.scalars().all())
 
     unpaid_result = await db.execute(
         select(func.sum(Income.amount)).where(
@@ -135,7 +140,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         select(
             func.strftime("%m", Expense.date).label("month"),
             func.sum(Expense.amount).label("total")
-        ).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
+        ).where(year_filter(Expense, year), regular_filter)
         .group_by(func.strftime("%m", Expense.date))
         .order_by(func.strftime("%m", Expense.date))
     )
@@ -164,7 +169,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     exp_by_cat = await db.execute(
         select(ExpenseCategory.name, func.sum(Expense.amount).label("total"))
         .join(Expense, Expense.category_id == ExpenseCategory.id)
-        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
+        .where(year_filter(Expense, year), regular_filter)
         .group_by(ExpenseCategory.name)
         .order_by(func.sum(Expense.amount).desc())
     )
@@ -184,7 +189,9 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     return templates.TemplateResponse(request, "dashboard.html", {
         "total_income": total_income,
         "total_expenses": total_expenses,
-        "profit": total_income - total_expenses,
+        "total_huisvestingskosten": total_huisvestingskosten,
+        "dep_this_year": dep_this_year,
+        "profit": total_income - total_expenses - total_huisvestingskosten - dep_this_year,
         "unpaid": unpaid,
         "recent_incomes": recent_inc.scalars().all(),
         "recent_expenses": recent_exp.scalars().all(),
@@ -200,13 +207,9 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     })
 
 
-@router.get("/rapportages", response_class=HTMLResponse)
-async def reports(request: Request, db: AsyncSession = Depends(get_db)):
-    user = await require_auth(request, db)
-    if isinstance(user, RedirectResponse):
-        return user
-
-    year = int(request.query_params.get("jaar", datetime.now().year))
+async def _reports_data(db: AsyncSession, year: int) -> dict:
+    regular_filter = await _regular_expense_filter(db)
+    huisvesting_filter = await _huisvesting_filter(db)
 
     inc_by_cat = await db.execute(
         select(IncomeCategory.name, func.sum(Income.amount).label("total"))
@@ -217,14 +220,17 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
     exp_by_cat = await db.execute(
         select(ExpenseCategory.name, func.sum(Expense.amount).label("total"))
         .join(Expense, Expense.category_id == ExpenseCategory.id)
-        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
+        .where(year_filter(Expense, year), regular_filter)
         .group_by(ExpenseCategory.name)
     )
     inc_total = await db.execute(
         select(func.sum(Income.amount)).where(year_filter(Income, year))
     )
     exp_total = await db.execute(
-        select(func.sum(Expense.amount)).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), regular_filter)
+    )
+    huisvesting_total = await db.execute(
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), huisvesting_filter)
     )
 
     dep_result = await db.execute(
@@ -236,6 +242,7 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
 
     total_inc = inc_total.scalar() or 0
     total_exp = exp_total.scalar() or 0
+    total_huisvesting = huisvesting_total.scalar() or 0
 
     hours_by_cat = await db.execute(
         select(HourCategory.name, func.sum(TimeEntry.hours).label("total"))
@@ -268,14 +275,14 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
     total_km = sum(r["km"] for r in km_rows)
     total_km_amount = sum(r["amount"] for r in km_rows)
 
-    return templates.TemplateResponse(request, "reports.html", {
+    return {
         "year": year,
-        "years": list(range(2022, datetime.now().year + 2)),
         "income_by_cat": [(r.name, float(r.total)) for r in inc_by_cat],
         "expense_by_cat": [(r.name, float(r.total)) for r in exp_by_cat],
         "total_income": total_inc,
         "total_expenses": total_exp,
-        "profit": total_inc - total_exp,
+        "total_huisvestingskosten": total_huisvesting,
+        "profit": total_inc - total_exp - total_huisvesting - dep_this_year,
         "depreciations": dep_data,
         "dep_this_year": dep_this_year,
         "hours_by_cat": [(r.name, float(r.total)) for r in hours_by_cat],
@@ -285,7 +292,35 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
         "km_rows": km_rows,
         "total_km": total_km,
         "total_km_amount": total_km_amount,
-    })
+    }
+
+
+@router.get("/rapportages", response_class=HTMLResponse)
+async def reports(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    year = int(request.query_params.get("jaar", datetime.now().year))
+    data = await _reports_data(db, year)
+    data["years"] = list(range(2022, datetime.now().year + 2))
+    return templates.TemplateResponse(request, "reports.html", data)
+
+
+@router.get("/export/rapportage-pdf")
+async def export_report_pdf(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    year = int(request.query_params.get("jaar", datetime.now().year))
+    data = await _reports_data(db, year)
+
+    settings = request.state.settings
+    company = settings.company_name if settings else ""
+    buf = generate_rapportage_pdf(data, company_name=company)
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=rapportage_{year}.pdf"})
 
 
 @router.get("/jaaroverzicht", response_class=HTMLResponse)
@@ -295,6 +330,8 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
         return user
 
     year = int(request.query_params.get("jaar", datetime.now().year))
+    regular_filter = await _regular_expense_filter(db)
+    huisvesting_filter = await _huisvesting_filter(db)
 
     monthly_inc = await db.execute(
         select(
@@ -307,7 +344,7 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
         select(
             func.strftime("%m", Expense.date).label("month"),
             func.sum(Expense.amount).label("total")
-        ).where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
+        ).where(year_filter(Expense, year), regular_filter)
         .group_by(func.strftime("%m", Expense.date))
     )
     all_inc = await db.execute(
@@ -350,7 +387,7 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
     exp_by_cat = await db.execute(
         select(ExpenseCategory.name, func.sum(Expense.amount).label("total"))
         .join(Expense, Expense.category_id == ExpenseCategory.id)
-        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE)
+        .where(year_filter(Expense, year), regular_filter)
         .group_by(ExpenseCategory.name)
     )
     unpaid = await db.execute(
@@ -358,6 +395,20 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
         .where(Income.status == "niet_betaald", year_filter(Income, year))
         .order_by(Income.date)
     )
+
+    huisvesting_result = await db.execute(
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), huisvesting_filter)
+    )
+    total_huisvestingskosten = huisvesting_result.scalar() or 0
+
+    dep_result = await db.execute(select(Depreciation))
+    total_afschrijvingen = sum(calc_depreciation_for_year(d, year) for d in dep_result.scalars().all())
+
+    km_total_col = MileageEntry.km_outbound + MileageEntry.km_return
+    km_result = await db.execute(
+        select(func.sum(km_total_col)).where(year_filter(MileageEntry, year))
+    )
+    total_km = km_result.scalar() or 0.0
 
     open_items_result = await db.execute(select(ChecklistItem).where(ChecklistItem.status == "open"))
     open_checklist_items = open_items_result.scalars().all()
@@ -374,7 +425,10 @@ async def yearly_overview(request: Request, db: AsyncSession = Depends(get_db)):
         "rows": rows,
         "total_income": total_inc,
         "total_expenses": total_exp,
-        "profit": total_inc - total_exp,
+        "total_huisvestingskosten": total_huisvestingskosten,
+        "total_afschrijvingen": total_afschrijvingen,
+        "total_km": total_km,
+        "profit": total_inc - total_exp - total_huisvestingskosten - total_afschrijvingen,
         "income_by_cat": [(r.name, float(r.total)) for r in inc_by_cat],
         "expense_by_cat": [(r.name, float(r.total)) for r in exp_by_cat],
         "unpaid_invoices": unpaid.scalars().all(),
@@ -470,6 +524,8 @@ async def export_yearly(request: Request, db: AsyncSession = Depends(get_db)):
     if isinstance(user, RedirectResponse):
         return user
     year = int(request.query_params.get("jaar", datetime.now().year))
+    regular_filter = await _regular_expense_filter(db)
+    huisvesting_filter = await _huisvesting_filter(db)
 
     monthly_inc = await db.execute(
         select(func.strftime("%m", Income.date).label("month"), func.sum(Income.amount).label("total"))
@@ -477,16 +533,28 @@ async def export_yearly(request: Request, db: AsyncSession = Depends(get_db)):
     )
     monthly_exp = await db.execute(
         select(func.strftime("%m", Expense.date).label("month"), func.sum(Expense.amount).label("total"))
-        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE).group_by(func.strftime("%m", Expense.date))
+        .where(year_filter(Expense, year), regular_filter).group_by(func.strftime("%m", Expense.date))
     )
     inc_by_month = {int(r.month): float(r.total) for r in monthly_inc}
     exp_by_month = {int(r.month): float(r.total) for r in monthly_exp}
     month_names = ["Januari","Februari","Maart","April","Mei","Juni",
                    "Juli","Augustus","September","Oktober","November","December"]
 
+    huisvesting_result = await db.execute(
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), huisvesting_filter)
+    )
+    total_huisvestingskosten = huisvesting_result.scalar() or 0
+
+    dep_result = await db.execute(select(Depreciation))
+    total_afschrijvingen = sum(calc_depreciation_for_year(d, year) for d in dep_result.scalars().all())
+
+    km_total_col = MileageEntry.km_outbound + MileageEntry.km_return
+    km_result = await db.execute(select(func.sum(km_total_col)).where(year_filter(MileageEntry, year)))
+    total_km = km_result.scalar() or 0.0
+
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
-    writer.writerow(["Maand", "Inkomsten", "Uitgaven", "Winst/Verlies", "Cumulatief"])
+    writer.writerow(["Maand", "Inkomsten", "Reguliere uitgaven", "Winst/Verlies", "Cumulatief"])
     cumulative = 0
     for m in range(1, 13):
         inc = inc_by_month.get(m, 0)
@@ -495,6 +563,12 @@ async def export_yearly(request: Request, db: AsyncSession = Depends(get_db)):
         cumulative += profit
         writer.writerow([month_names[m-1], f"{inc:.2f}", f"{exp:.2f}",
                          f"{profit:.2f}", f"{cumulative:.2f}"])
+    writer.writerow([])
+    writer.writerow(["Totaal inkomsten", f"{sum(inc_by_month.values()):.2f}"])
+    writer.writerow(["Totaal reguliere uitgaven", f"{sum(exp_by_month.values()):.2f}"])
+    writer.writerow(["Totaal huisvestingskosten", f"{total_huisvestingskosten:.2f}"])
+    writer.writerow(["Totaal afschrijvingen", f"{total_afschrijvingen:.2f}"])
+    writer.writerow(["Zakelijke kilometers", f"{total_km:.1f}"])
     output.seek(0)
     return StreamingResponse(io.BytesIO(output.getvalue().encode("utf-8-sig")),
         media_type="text/csv",
@@ -523,9 +597,18 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
         .where(year_filter(Expense, year)).order_by(Expense.date)
     )
     expenses = expenses_q.scalars().all()
+    huisvesting_id = await _huisvestingskosten_id(db)
 
     total_income = sum(i.amount for i in incomes)
-    total_expenses = sum(e.amount for e in expenses if not e.is_depreciable)
+    total_expenses = sum(e.amount for e in expenses
+                         if not _is_afschrijving_expense(e) and e.category_id != huisvesting_id)
+    total_huisvestingskosten = sum(e.amount for e in expenses
+                                   if e.category_id == huisvesting_id and not _is_afschrijving_expense(e))
+    dep_result = await db.execute(select(Depreciation))
+    total_afschrijvingen = sum(calc_depreciation_for_year(d, year) for d in dep_result.scalars().all())
+    km_total_col = MileageEntry.km_outbound + MileageEntry.km_return
+    km_result = await db.execute(select(func.sum(km_total_col)).where(year_filter(MileageEntry, year)))
+    total_km = km_result.scalar() or 0.0
 
     month_names = ["Januari","Februari","Maart","April","Mei","Juni",
                    "Juli","Augustus","September","Oktober","November","December"]
@@ -587,7 +670,7 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
         inc_by_m[i.date.month] = inc_by_m.get(i.date.month, 0) + i.amount
     exp_by_m = {}
     for e in expenses:
-        if e.is_depreciable:
+        if _is_afschrijving_expense(e) or e.category_id == huisvesting_id:
             continue
         exp_by_m[e.date.month] = exp_by_m.get(e.date.month, 0) + e.amount
     cumulative = 0
@@ -604,11 +687,24 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
         ws3.cell(row, 5, cumulative).number_format = '#,##0.00'
     total_row = 14
     for col, val in [(1, "Totaal"), (2, total_income), (3, total_expenses),
-                     (4, total_income - total_expenses)]:
+                     (4, total_income - total_expenses - total_huisvestingskosten - total_afschrijvingen)]:
         c = ws3.cell(total_row, col, val)
         c.font = Font(bold=True)
         if col > 1:
             c.number_format = '#,##0.00'
+
+    summary_row = 16
+    ws3.cell(summary_row, 1, "Samenvatting").font = Font(bold=True)
+    for i, (label, val) in enumerate([
+        ("Totaal inkomsten", total_income),
+        ("Totaal reguliere uitgaven", total_expenses),
+        ("Totaal huisvestingskosten", total_huisvestingskosten),
+        ("Totaal afschrijvingen", total_afschrijvingen),
+    ]):
+        ws3.cell(summary_row + 1 + i, 1, label)
+        ws3.cell(summary_row + 1 + i, 2, val).number_format = '#,##0.00'
+    ws3.cell(summary_row + 5, 1, "Zakelijke kilometers")
+    ws3.cell(summary_row + 5, 2, total_km).number_format = '#,##0.0'
     auto_width(ws3)
 
     # Sheet 4: Per categorie
@@ -621,7 +717,7 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
                            inc_by_cat.get(key, (0, 0))[1] + 1)
     exp_by_cat = {}
     for e in expenses:
-        if e.is_depreciable:
+        if _is_afschrijving_expense(e) or e.category_id == huisvesting_id:
             continue
         key = e.category.name if e.category else "Onbekend"
         exp_by_cat[key] = (exp_by_cat.get(key, (0, 0))[0] + e.amount,
@@ -635,6 +731,11 @@ async def export_yearly_xlsx(request: Request, db: AsyncSession = Depends(get_db
         ws4.cell(row, 1, cat); ws4.cell(row, 2, "Uitgaven")
         ws4.cell(row, 3, total).number_format = '#,##0.00'
         ws4.cell(row, 4, count); row += 1
+    ws4.cell(row, 1, "Huisvestingskosten"); ws4.cell(row, 2, "Uitgaven")
+    ws4.cell(row, 3, total_huisvestingskosten).number_format = '#,##0.00'
+    row += 1
+    ws4.cell(row, 1, "Afschrijvingen"); ws4.cell(row, 2, "Uitgaven")
+    ws4.cell(row, 3, total_afschrijvingen).number_format = '#,##0.00'
     auto_width(ws4)
 
     buf = io.BytesIO()
@@ -651,6 +752,8 @@ async def export_yearly_pdf(request: Request, db: AsyncSession = Depends(get_db)
     if isinstance(user, RedirectResponse):
         return user
     year = int(request.query_params.get("jaar", datetime.now().year))
+    regular_filter = await _regular_expense_filter(db)
+    huisvesting_filter = await _huisvesting_filter(db)
 
     monthly_inc = await db.execute(
         select(func.strftime("%m", Income.date).label("month"), func.sum(Income.amount).label("total"))
@@ -658,10 +761,20 @@ async def export_yearly_pdf(request: Request, db: AsyncSession = Depends(get_db)
     )
     monthly_exp = await db.execute(
         select(func.strftime("%m", Expense.date).label("month"), func.sum(Expense.amount).label("total"))
-        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE).group_by(func.strftime("%m", Expense.date))
+        .where(year_filter(Expense, year), regular_filter).group_by(func.strftime("%m", Expense.date))
     )
     inc_by_month = {int(r.month): float(r.total) for r in monthly_inc}
     exp_by_month = {int(r.month): float(r.total) for r in monthly_exp}
+
+    huisvesting_result = await db.execute(
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), huisvesting_filter)
+    )
+    total_huisvestingskosten = huisvesting_result.scalar() or 0
+    dep_result = await db.execute(select(Depreciation))
+    total_afschrijvingen = sum(calc_depreciation_for_year(d, year) for d in dep_result.scalars().all())
+    km_total_col = MileageEntry.km_outbound + MileageEntry.km_return
+    km_result = await db.execute(select(func.sum(km_total_col)).where(year_filter(MileageEntry, year)))
+    total_km = km_result.scalar() or 0.0
 
     fy_result = await db.execute(select(FiscalYear).where(FiscalYear.year == year))
     fiscal_year = fy_result.scalar_one_or_none()
@@ -669,7 +782,9 @@ async def export_yearly_pdf(request: Request, db: AsyncSession = Depends(get_db)
     settings = request.state.settings
     company = settings.company_name if settings else ""
     buf = generate_yearly_pdf(year, inc_by_month, exp_by_month,
-                              company_name=company, fiscal_year=fiscal_year)
+                              company_name=company, fiscal_year=fiscal_year,
+                              total_huisvestingskosten=total_huisvestingskosten,
+                              total_afschrijvingen=total_afschrijvingen, total_km=total_km)
     return StreamingResponse(buf, media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=jaaroverzicht_{year}.pdf"})
 
@@ -680,6 +795,8 @@ async def export_full_year_pdf(request: Request, db: AsyncSession = Depends(get_
     if isinstance(user, RedirectResponse):
         return user
     year = int(request.query_params.get("jaar", datetime.now().year))
+    regular_filter = await _regular_expense_filter(db)
+    huisvesting_filter = await _huisvesting_filter(db)
 
     monthly_inc = await db.execute(
         select(func.strftime("%m", Income.date).label("month"), func.sum(Income.amount).label("total"))
@@ -687,10 +804,20 @@ async def export_full_year_pdf(request: Request, db: AsyncSession = Depends(get_
     )
     monthly_exp = await db.execute(
         select(func.strftime("%m", Expense.date).label("month"), func.sum(Expense.amount).label("total"))
-        .where(year_filter(Expense, year), NOT_DEPRECIABLE_PURCHASE).group_by(func.strftime("%m", Expense.date))
+        .where(year_filter(Expense, year), regular_filter).group_by(func.strftime("%m", Expense.date))
     )
     inc_by_month = {int(r.month): float(r.total) for r in monthly_inc}
     exp_by_month = {int(r.month): float(r.total) for r in monthly_exp}
+
+    huisvesting_result = await db.execute(
+        select(func.sum(Expense.amount)).where(year_filter(Expense, year), huisvesting_filter)
+    )
+    total_huisvestingskosten = huisvesting_result.scalar() or 0
+    dep_result = await db.execute(select(Depreciation))
+    total_afschrijvingen = sum(calc_depreciation_for_year(d, year) for d in dep_result.scalars().all())
+    km_total_col = MileageEntry.km_outbound + MileageEntry.km_return
+    km_result = await db.execute(select(func.sum(km_total_col)).where(year_filter(MileageEntry, year)))
+    total_km = km_result.scalar() or 0.0
 
     incomes_q = await db.execute(
         select(Income).options(selectinload(Income.category))
@@ -711,6 +838,8 @@ async def export_full_year_pdf(request: Request, db: AsyncSession = Depends(get_
     company = settings.company_name if settings else ""
     buf = generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
                                  company_name=company, fiscal_year=fiscal_year,
-                                 received_via_labels=RECEIVED_VIA_OPTIONS)
+                                 received_via_labels=RECEIVED_VIA_OPTIONS,
+                                 total_huisvestingskosten=total_huisvestingskosten,
+                                 total_afschrijvingen=total_afschrijvingen, total_km=total_km)
     return StreamingResponse(buf, media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=jaarexport_{year}.pdf"})

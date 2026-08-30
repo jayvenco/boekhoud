@@ -1,6 +1,7 @@
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.models import FiscalYear, FiscalYearAuditLog, Income, Expense
+from backend.services.expense_filters import regular_expense_filter, huisvesting_filter, AFSCHRIJVING_INSTALLMENT_ROW
 from datetime import date, datetime
 
 
@@ -33,21 +34,43 @@ async def get_year_stats(db: AsyncSession, year: int) -> dict:
     total_income = float(inc_row[0] or 0)
     income_count = inc_row[1] or 0
 
+    regular_filter = await regular_expense_filter(db)
     exp = await db.execute(
         select(func.sum(Expense.amount), func.count(Expense.id)).where(
             func.strftime("%Y", Expense.date) == str(year),
-            Expense.is_depreciable.isnot(True),
+            regular_filter,
         )
     )
     exp_row = exp.one()
     total_expenses = float(exp_row[0] or 0)
     expense_count = exp_row[1] or 0
 
+    huisvesting_cond = await huisvesting_filter(db)
+    huisvesting = await db.execute(
+        select(func.sum(Expense.amount), func.count(Expense.id)).where(
+            func.strftime("%Y", Expense.date) == str(year), huisvesting_cond,
+        )
+    )
+    huisvesting_row = huisvesting.one()
+    total_huisvestingskosten = float(huisvesting_row[0] or 0)
+    huisvesting_count = huisvesting_row[1] or 0
+
+    dep = await db.execute(
+        select(func.sum(Expense.amount), func.count(Expense.id)).where(
+            func.strftime("%Y", Expense.date) == str(year), AFSCHRIJVING_INSTALLMENT_ROW,
+        )
+    )
+    dep_row = dep.one()
+    total_afschrijvingen = float(dep_row[0] or 0)
+    dep_count = dep_row[1] or 0
+
     return {
         "total_income": total_income,
         "total_expenses": total_expenses,
-        "balance": total_income - total_expenses,
-        "transaction_count": income_count + expense_count,
+        "total_huisvestingskosten": total_huisvestingskosten,
+        "total_afschrijvingen": total_afschrijvingen,
+        "balance": total_income - total_expenses - total_huisvestingskosten - total_afschrijvingen,
+        "transaction_count": income_count + expense_count + huisvesting_count + dep_count,
         "income_count": income_count,
         "expense_count": expense_count,
     }

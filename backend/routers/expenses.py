@@ -14,6 +14,7 @@ from backend.services.invoice_numbering import get_numbering_settings
 from backend.services.fiscal_year import is_year_locked, get_locked_years
 from backend.services.pdf_export import generate_expenses_pdf
 from backend.services.sorting import sort_url
+from backend.services.expense_filters import is_afschrijving_expense, is_huisvesting_expense
 from datetime import date, datetime
 import calendar
 from typing import Optional, List
@@ -21,6 +22,8 @@ from typing import Optional, List
 router = APIRouter(prefix="/uitgaven")
 templates = Jinja2Templates(directory="backend/templates")
 templates.env.globals["t"] = t
+templates.env.globals["is_afschrijving_expense"] = is_afschrijving_expense
+templates.env.globals["is_huisvesting_expense"] = is_huisvesting_expense
 templates.env.globals["sort_url"] = sort_url
 
 # Aantal occurrences dat 12 maanden vooruit gegenereerd wordt, per frequentie.
