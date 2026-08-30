@@ -10,7 +10,7 @@ from backend.routers.auth import require_auth
 from backend.routers.checklist import get_checklist_summary
 from backend.routers.hours import URENCRITERIUM_UREN
 from backend.services.i18n import t
-from backend.services.pdf_export import generate_yearly_pdf, generate_full_year_pdf
+from backend.services.pdf_export import generate_yearly_pdf, generate_full_year_pdf, generate_rapportage_pdf
 from backend.routers.incomes import RECEIVED_VIA_OPTIONS
 from datetime import date, datetime
 from typing import Optional
@@ -200,14 +200,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     })
 
 
-@router.get("/rapportages", response_class=HTMLResponse)
-async def reports(request: Request, db: AsyncSession = Depends(get_db)):
-    user = await require_auth(request, db)
-    if isinstance(user, RedirectResponse):
-        return user
-
-    year = int(request.query_params.get("jaar", datetime.now().year))
-
+async def _reports_data(db: AsyncSession, year: int) -> dict:
     inc_by_cat = await db.execute(
         select(IncomeCategory.name, func.sum(Income.amount).label("total"))
         .join(Income, Income.category_id == IncomeCategory.id)
@@ -268,9 +261,8 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
     total_km = sum(r["km"] for r in km_rows)
     total_km_amount = sum(r["amount"] for r in km_rows)
 
-    return templates.TemplateResponse(request, "reports.html", {
+    return {
         "year": year,
-        "years": list(range(2022, datetime.now().year + 2)),
         "income_by_cat": [(r.name, float(r.total)) for r in inc_by_cat],
         "expense_by_cat": [(r.name, float(r.total)) for r in exp_by_cat],
         "total_income": total_inc,
@@ -285,7 +277,35 @@ async def reports(request: Request, db: AsyncSession = Depends(get_db)):
         "km_rows": km_rows,
         "total_km": total_km,
         "total_km_amount": total_km_amount,
-    })
+    }
+
+
+@router.get("/rapportages", response_class=HTMLResponse)
+async def reports(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    year = int(request.query_params.get("jaar", datetime.now().year))
+    data = await _reports_data(db, year)
+    data["years"] = list(range(2022, datetime.now().year + 2))
+    return templates.TemplateResponse(request, "reports.html", data)
+
+
+@router.get("/export/rapportage-pdf")
+async def export_report_pdf(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await require_auth(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    year = int(request.query_params.get("jaar", datetime.now().year))
+    data = await _reports_data(db, year)
+
+    settings = request.state.settings
+    company = settings.company_name if settings else ""
+    buf = generate_rapportage_pdf(data, company_name=company)
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=rapportage_{year}.pdf"})
 
 
 @router.get("/jaaroverzicht", response_class=HTMLResponse)

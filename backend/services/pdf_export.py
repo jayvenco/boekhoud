@@ -134,22 +134,24 @@ def _monthly_chart(inc_by_month, exp_by_month, month_names) -> Drawing:
     return d
 
 
-def _category_chart(cat_totals, bar_color) -> Drawing:
+def _category_chart(cat_totals, bar_color, total_width=680, name_len=22) -> Drawing:
     """Horizontale staafdiagram van bedrag per categorie, aflopend gesorteerd."""
     items = sorted(cat_totals, key=lambda x: x[1], reverse=True)[:8]
     if not items:
         return None
     items = list(reversed(items))
     values = [v for _, v in items]
-    names = [n[:22] for n, _ in items]
+    names = [n[:name_len] for n, _ in items]
     max_val = max(values + [1])
 
+    label_w = min(100, total_width * 0.22)
+    chart_w = total_width - label_w - 25
     height = 24 * len(items) + 30
-    d = Drawing(680, height)
+    d = Drawing(total_width, height)
     chart = HorizontalBarChart()
-    chart.x = 110
+    chart.x = label_w
     chart.y = 15
-    chart.width = 480
+    chart.width = chart_w
     chart.height = height - 30
     chart.data = [values]
     chart.categoryAxis.categoryNames = names
@@ -496,6 +498,138 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
     tbl = Table(rows, colWidths=[4*cm, 2.5*cm, 3.5*cm, 8.5*cm, 2.5*cm, 2.5*cm], repeatRows=1)
     tbl.setStyle(_tbl_style(has_footer=True))
     story.append(tbl)
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+def generate_rapportage_pdf(data: dict, company_name="") -> BytesIO:
+    """PDF-versie van de Rapportages-pagina: categorieverdeling, uren,
+    kilometers en afschrijvingsoverzicht voor het gekozen jaar."""
+    year = data["year"]
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    story = []
+    _header(story, f"Rapportage {year}", company_name, filters_desc="")
+
+    total_inc = data["total_income"]
+    total_exp = data["total_expenses"]
+    profit = data["profit"]
+    summary_rows = [["Totale inkomsten", "Totale uitgaven", "Netto resultaat"],
+                     [f"€ {total_inc:,.2f}", f"€ {total_exp:,.2f}", f"€ {profit:,.2f}"]]
+    if data.get("dep_this_year"):
+        summary_rows[0].append("Afschrijvingen dit jaar")
+        summary_rows[1].append(f"€ {data['dep_this_year']:,.2f}")
+    summary = Table(summary_rows, colWidths=[6*cm] * len(summary_rows[0]))
+    s = _summary_style()
+    s.add("TEXTCOLOR", (2, 1), (2, 1), SUCCESS if profit >= 0 else DANGER)
+    summary.setStyle(s)
+    story.append(summary)
+    story.append(Spacer(1, 0.5*cm))
+
+    # Inkomsten & uitgaven per categorie, naast elkaar
+    both = bool(data["income_by_cat"]) and bool(data["expense_by_cat"])
+    chart_width = 220 if both else 480
+    name_len = 14 if both else 22
+    inc_chart = _category_chart(data["income_by_cat"], SUCCESS, total_width=chart_width, name_len=name_len)
+    exp_chart = _category_chart(data["expense_by_cat"], DANGER, total_width=chart_width, name_len=name_len)
+    if inc_chart or exp_chart:
+        headers_row = []
+        chart_row = []
+        if inc_chart:
+            headers_row.append(_P("Inkomsten per categorie", fontName="Helvetica-Bold", fontSize=10, textColor=TEXT))
+            chart_row.append(inc_chart)
+        if exp_chart:
+            headers_row.append(_P("Uitgaven per categorie", fontName="Helvetica-Bold", fontSize=10, textColor=TEXT))
+            chart_row.append(exp_chart)
+        col_w = 16*cm if len(chart_row) == 1 else 8*cm
+        t = Table([headers_row, chart_row], colWidths=[col_w] * len(chart_row))
+        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        story.append(t)
+        story.append(Spacer(1, 0.4*cm))
+    elif not data["income_by_cat"] and not data["expense_by_cat"]:
+        story.append(_P(f"Geen inkomsten of uitgaven in {year}.", fontName="Helvetica-Oblique",
+                        fontSize=9, textColor=TEXT_LIGHT))
+        story.append(Spacer(1, 0.4*cm))
+
+    # Urenregistratie
+    story.append(PageBreak())
+    _header(story, "Urenregistratie", company_name, filters_desc="")
+    total_hours = data["total_hours"]
+    summary = Table(
+        [["Totaal uren", "Urencriterium voortgang", "Categorieën"],
+         [f"{total_hours:,.1f}", f"{data['urencriterium_pct']}% van {data['urencriterium']}", str(len(data["hours_by_cat"]))]],
+        colWidths=[6*cm, 6*cm, 6*cm]
+    )
+    summary.setStyle(_summary_style())
+    story.append(summary)
+    story.append(Spacer(1, 0.4*cm))
+    if data["hours_by_cat"]:
+        headers = ["Categorie", "Uren", "%"]
+        rows = [headers]
+        for name, total in data["hours_by_cat"]:
+            pct = (total / total_hours * 100) if total_hours else 0
+            rows.append([name, f"{total:,.1f}", f"{pct:.0f}%"])
+        tbl = Table(rows, colWidths=[8*cm, 4*cm, 4*cm], repeatRows=1)
+        tbl.setStyle(_tbl_style())
+        story.append(tbl)
+    else:
+        story.append(_P(f"Geen uren geregistreerd in {year}.", fontName="Helvetica-Oblique",
+                        fontSize=9, textColor=TEXT_LIGHT))
+
+    # Kilometerregistratie
+    story.append(Spacer(1, 0.6*cm))
+    story.append(_P("Gereden kilometers per maand", fontName="Helvetica-Bold",
+                    fontSize=12, textColor=BRAND, spaceAfter=6))
+    summary = Table(
+        [["Totaal km", "Totaal bedrag"],
+         [f"{data['total_km']:,.1f}", f"€ {data['total_km_amount']:,.2f}"]],
+        colWidths=[8*cm, 8*cm]
+    )
+    summary.setStyle(_summary_style())
+    story.append(summary)
+    story.append(Spacer(1, 0.4*cm))
+    if data["total_km"]:
+        headers = ["Maand", "Km", "Bedrag (€)"]
+        rows = [headers]
+        for r in data["km_rows"]:
+            rows.append([r["name"], f"{r['km']:,.1f}", f"{r['amount']:,.2f}"])
+        tbl = Table(rows, colWidths=[8*cm, 4*cm, 4*cm], repeatRows=1)
+        tbl.setStyle(_tbl_style())
+        story.append(tbl)
+    else:
+        story.append(_P(f"Geen kilometers geregistreerd in {year}.", fontName="Helvetica-Oblique",
+                        fontSize=9, textColor=TEXT_LIGHT))
+
+    # Afschrijvingsoverzicht
+    if data["depreciations"]:
+        story.append(PageBreak())
+        _header(story, "Afschrijvingsoverzicht", company_name, filters_desc="")
+        for dep in data["depreciations"]:
+            story.append(_P(f"{dep['description']} — {dep['invoice']}", fontName="Helvetica-Bold",
+                            fontSize=11, textColor=TEXT, spaceAfter=6))
+            summary = Table(
+                [["Aanschaf", "Per jaar", "Restwaarde", "Boekwaarde", "Volledig afgeschreven"],
+                 [f"€ {dep['purchase']:,.2f}", f"€ {dep['annual']:,.2f}", f"€ {dep['residual']:,.2f}",
+                  f"€ {dep['book_value']:,.2f}", str(dep['end_year'])]],
+                colWidths=[5*cm] * 5
+            )
+            summary.setStyle(_summary_style())
+            story.append(summary)
+            story.append(Spacer(1, 0.3*cm))
+
+            headers = ["Jaar", "Afschrijving (€)", "Cumulatief (€)", "Boekwaarde (€)"]
+            rows = [headers]
+            for s_row in dep["schedule"]:
+                rows.append([str(s_row["year"]), f"{s_row['amount']:,.2f}",
+                            f"{s_row['cumulative']:,.2f}", f"{s_row['book_value']:,.2f}"])
+            tbl = Table(rows, colWidths=[4*cm, 7*cm, 7*cm, 7*cm], repeatRows=1)
+            tbl.setStyle(_tbl_style())
+            story.append(tbl)
+            story.append(Spacer(1, 0.6*cm))
 
     doc.build(story)
     buf.seek(0)
