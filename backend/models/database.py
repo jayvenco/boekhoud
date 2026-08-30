@@ -144,6 +144,7 @@ async def init_db():
                 ExpenseCategory(name="Reiskosten", slug="reiskosten"),
                 ExpenseCategory(name="Apparatuur", slug="apparatuur"),
                 ExpenseCategory(name="Overige", slug="overige"),
+                ExpenseCategory(name="Huisvestingskosten", slug="huisvestingskosten"),
             ]
             session.add_all(ecats)
 
@@ -170,6 +171,7 @@ async def init_db():
             ("Apparatuur", "apparatuur", "expense"),
             ("Overige", "overige", "expense"),
             ("Debiteuren", "debiteuren", "income"),
+            ("Huisvestingskosten", "huisvestingskosten", "expense"),
         ]:
             if model == "expense":
                 exists = await session.execute(select(ExpenseCategory).where(ExpenseCategory.slug == slug))

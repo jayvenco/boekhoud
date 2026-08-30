@@ -10,6 +10,11 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.charts.barcharts import VerticalBarChart, HorizontalBarChart
 from reportlab.graphics.charts.legends import Legend
+from backend.services.expense_filters import (
+    is_afschrijving_expense as _is_afschrijving,
+    is_afschrijving_installment as _is_afschrijving_installment,
+    is_huisvesting_expense as _is_huisvesting,
+)
 
 BRAND      = colors.HexColor("#8B6F4E")
 BRAND_LITE = colors.HexColor("#F5EDE3")
@@ -230,7 +235,8 @@ def generate_incomes_pdf(incomes, company_name="", filters_desc="",
 
 
 def generate_yearly_pdf(year, inc_by_month, exp_by_month,
-                        company_name="", fiscal_year=None) -> BytesIO:
+                        company_name="", fiscal_year=None,
+                        total_huisvestingskosten=0, total_afschrijvingen=0, total_km=0) -> BytesIO:
     month_names = ["Januari","Februari","Maart","April","Mei","Juni",
                    "Juli","Augustus","September","Oktober","November","December"]
     buf = BytesIO()
@@ -242,25 +248,29 @@ def generate_yearly_pdf(year, inc_by_month, exp_by_month,
 
     total_inc = sum(inc_by_month.values())
     total_exp = sum(exp_by_month.values())
-    balance   = total_inc - total_exp
+    balance   = total_inc - total_exp - total_huisvestingskosten - total_afschrijvingen
 
     summary = Table(
-        [["Totale inkomsten", "Totale uitgaven", "Winst / Verlies"],
-         [f"€ {total_inc:,.2f}", f"€ {total_exp:,.2f}", f"€ {balance:,.2f}"]],
-        colWidths=[6*cm, 6*cm, 6*cm]
+        [["Totale inkomsten", "Reguliere uitgaven", "Huisvestingskosten", "Afschrijvingen", "Winst / Verlies"],
+         [f"€ {total_inc:,.2f}", f"€ {total_exp:,.2f}", f"€ {total_huisvestingskosten:,.2f}",
+          f"€ {total_afschrijvingen:,.2f}", f"€ {balance:,.2f}"]],
+        colWidths=[5.2*cm] * 5
     )
     s = _summary_style()
-    s.add("TEXTCOLOR", (2, 1), (2, 1), SUCCESS if balance >= 0 else DANGER)
+    s.add("TEXTCOLOR", (4, 1), (4, 1), SUCCESS if balance >= 0 else DANGER)
     summary.setStyle(s)
     story.append(summary)
-    story.append(Spacer(1, 0.4*cm))
+    story.append(Spacer(1, 0.25*cm))
+    story.append(_P(f"Zakelijke kilometers: {total_km:,.1f} km", fontName="Helvetica",
+                    fontSize=9, textColor=TEXT_LIGHT))
+    story.append(Spacer(1, 0.3*cm))
 
     story.append(_P("Inkomsten & uitgaven per maand", fontName="Helvetica-Bold",
                     fontSize=10, textColor=TEXT, spaceAfter=4))
     story.append(_monthly_chart(inc_by_month, exp_by_month, month_names))
     story.append(Spacer(1, 0.4*cm))
 
-    headers = ["Maand", "Inkomsten (€)", "Uitgaven (€)", "Winst/Verlies (€)", "Cumulatief (€)"]
+    headers = ["Maand", "Inkomsten (€)", "Reguliere uitgaven (€)", "Winst/Verlies (€)", "Cumulatief (€)"]
     rows = [headers]
     cumulative = 0
     for m in range(1, 13):
@@ -276,7 +286,7 @@ def generate_yearly_pdf(year, inc_by_month, exp_by_month,
             f"{cumulative:,.2f}",
         ])
     rows.append(["Totaal", f"{total_inc:,.2f}", f"{total_exp:,.2f}",
-                 f"{balance:,.2f}", ""])
+                 f"{total_inc - total_exp:,.2f}", ""])
 
     tbl = Table(rows, colWidths=[4*cm, 4.5*cm, 4.5*cm, 4.5*cm, 4.5*cm], repeatRows=1)
     tbl.setStyle(_tbl_style(has_footer=True))
@@ -303,13 +313,14 @@ def generate_expenses_pdf(expenses, company_name="", filters_desc="") -> BytesIO
     story = []
     _header(story, "Uitgaven Overzicht", company_name, filters_desc)
 
-    total = sum(e.amount for e in expenses if not e.is_depreciable)
-    dep   = sum(e.amount for e in expenses if e.is_depreciable)
+    total = sum(e.amount for e in expenses if not _is_afschrijving(e) and not _is_huisvesting(e))
+    dep   = sum(e.amount for e in expenses if _is_afschrijving_installment(e))
+    huisvesting = sum(e.amount for e in expenses if _is_huisvesting(e) and not _is_afschrijving(e))
 
     summary = Table(
-        [["Totale uitgaven", "Afschrijvingen", "Aantal"],
-         [f"€ {total:,.2f}", f"€ {dep:,.2f}", str(len(expenses))]],
-        colWidths=[5 * cm, 5 * cm, 3 * cm]
+        [["Totale uitgaven", "Huisvestingskosten", "Afschrijvingen", "Aantal"],
+         [f"€ {total:,.2f}", f"€ {huisvesting:,.2f}", f"€ {dep:,.2f}", str(len(expenses))]],
+        colWidths=[5 * cm, 5 * cm, 5 * cm, 3 * cm]
     )
     s = _summary_style()
     s.add("TEXTCOLOR", (0, 1), (0, 1), DANGER)
@@ -319,7 +330,7 @@ def generate_expenses_pdf(expenses, company_name="", filters_desc="") -> BytesIO
 
     cat_totals = {}
     for e in expenses:
-        if e.is_depreciable:
+        if _is_afschrijving(e) or _is_huisvesting(e):
             continue
         key = e.category.name if e.category else "Onbekend"
         cat_totals[key] = cat_totals.get(key, 0) + e.amount
@@ -355,7 +366,8 @@ def generate_expenses_pdf(expenses, company_name="", filters_desc="") -> BytesIO
 
 def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
                            company_name="", fiscal_year=None,
-                           received_via_labels=None) -> BytesIO:
+                           received_via_labels=None,
+                           total_huisvestingskosten=0, total_afschrijvingen=0, total_km=0) -> BytesIO:
     """Gecombineerde PDF-jaarexport: jaarrapport + volledige inkomsten- en uitgavenlijst."""
     month_names = ["Januari","Februari","Maart","April","Mei","Juni",
                    "Juli","Augustus","September","Oktober","November","December"]
@@ -369,18 +381,22 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
     _header(story, f"Jaarrapport {year}", company_name, filters_desc="")
     total_inc = sum(inc_by_month.values())
     total_exp = sum(exp_by_month.values())
-    balance   = total_inc - total_exp
+    balance   = total_inc - total_exp - total_huisvestingskosten - total_afschrijvingen
 
     summary = Table(
-        [["Totale inkomsten", "Totale uitgaven", "Winst / Verlies"],
-         [f"€ {total_inc:,.2f}", f"€ {total_exp:,.2f}", f"€ {balance:,.2f}"]],
-        colWidths=[6*cm, 6*cm, 6*cm]
+        [["Totale inkomsten", "Reguliere uitgaven", "Huisvestingskosten", "Afschrijvingen", "Winst / Verlies"],
+         [f"€ {total_inc:,.2f}", f"€ {total_exp:,.2f}", f"€ {total_huisvestingskosten:,.2f}",
+          f"€ {total_afschrijvingen:,.2f}", f"€ {balance:,.2f}"]],
+        colWidths=[5.2*cm] * 5
     )
     s = _summary_style()
-    s.add("TEXTCOLOR", (2, 1), (2, 1), SUCCESS if balance >= 0 else DANGER)
+    s.add("TEXTCOLOR", (4, 1), (4, 1), SUCCESS if balance >= 0 else DANGER)
     summary.setStyle(s)
     story.append(summary)
-    story.append(Spacer(1, 0.4*cm))
+    story.append(Spacer(1, 0.25*cm))
+    story.append(_P(f"Zakelijke kilometers: {total_km:,.1f} km", fontName="Helvetica",
+                    fontSize=9, textColor=TEXT_LIGHT))
+    story.append(Spacer(1, 0.3*cm))
 
     story.append(_P("Inkomsten & uitgaven per maand", fontName="Helvetica-Bold",
                     fontSize=10, textColor=TEXT, spaceAfter=4))
@@ -458,13 +474,14 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
     # Sectie 3: Uitgaven
     story.append(PageBreak())
     _header(story, f"Uitgaven {year}", company_name, filters_desc="")
-    exp_total = sum(e.amount for e in expenses if not e.is_depreciable)
-    exp_dep   = sum(e.amount for e in expenses if e.is_depreciable)
+    exp_total = sum(e.amount for e in expenses if not _is_afschrijving(e) and not _is_huisvesting(e))
+    exp_dep   = sum(e.amount for e in expenses if _is_afschrijving_installment(e))
+    exp_huisvesting = sum(e.amount for e in expenses if _is_huisvesting(e) and not _is_afschrijving(e))
 
     summary = Table(
-        [["Totale uitgaven", "Afschrijvingen", "Aantal"],
-         [f"€ {exp_total:,.2f}", f"€ {exp_dep:,.2f}", str(len(expenses))]],
-        colWidths=[5*cm, 5*cm, 3*cm]
+        [["Totale uitgaven", "Huisvestingskosten", "Afschrijvingen", "Aantal"],
+         [f"€ {exp_total:,.2f}", f"€ {exp_huisvesting:,.2f}", f"€ {exp_dep:,.2f}", str(len(expenses))]],
+        colWidths=[5*cm, 5*cm, 5*cm, 3*cm]
     )
     s = _summary_style()
     s.add("TEXTCOLOR", (0, 1), (0, 1), DANGER)
@@ -474,7 +491,7 @@ def generate_full_year_pdf(year, incomes, expenses, inc_by_month, exp_by_month,
 
     exp_cat_totals = {}
     for e in expenses:
-        if e.is_depreciable:
+        if _is_afschrijving(e) or _is_huisvesting(e):
             continue
         key = e.category.name if e.category else "Onbekend"
         exp_cat_totals[key] = exp_cat_totals.get(key, 0) + e.amount
@@ -518,14 +535,20 @@ def generate_rapportage_pdf(data: dict, company_name="") -> BytesIO:
     total_inc = data["total_income"]
     total_exp = data["total_expenses"]
     profit = data["profit"]
+    profit_col = 2
     summary_rows = [["Totale inkomsten", "Totale uitgaven", "Netto resultaat"],
                      [f"€ {total_inc:,.2f}", f"€ {total_exp:,.2f}", f"€ {profit:,.2f}"]]
+    if data.get("total_huisvestingskosten"):
+        summary_rows[0].insert(2, "Huisvestingskosten")
+        summary_rows[1].insert(2, f"€ {data['total_huisvestingskosten']:,.2f}")
+        profit_col += 1
     if data.get("dep_this_year"):
-        summary_rows[0].append("Afschrijvingen dit jaar")
-        summary_rows[1].append(f"€ {data['dep_this_year']:,.2f}")
+        summary_rows[0].insert(profit_col, "Afschrijvingen dit jaar")
+        summary_rows[1].insert(profit_col, f"€ {data['dep_this_year']:,.2f}")
+        profit_col += 1
     summary = Table(summary_rows, colWidths=[6*cm] * len(summary_rows[0]))
     s = _summary_style()
-    s.add("TEXTCOLOR", (2, 1), (2, 1), SUCCESS if profit >= 0 else DANGER)
+    s.add("TEXTCOLOR", (profit_col, 1), (profit_col, 1), SUCCESS if profit >= 0 else DANGER)
     summary.setStyle(s)
     story.append(summary)
     story.append(Spacer(1, 0.5*cm))

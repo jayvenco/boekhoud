@@ -16,6 +16,7 @@ from backend.models.models import (
     PaymentStatus, ReceivedVia,
 )
 from backend.services.invoice_numbering import get_next_invoice_number, get_numbering_settings
+from backend.services.expense_filters import regular_expense_filter, huisvesting_filter, AFSCHRIJVING_INSTALLMENT_ROW
 
 router = APIRouter(prefix="/api/v1", tags=["API"])
 
@@ -149,19 +150,37 @@ async def get_stats(
     )
     inc_total, inc_count = inc_result.one()
 
+    regular_filter = await regular_expense_filter(db)
     exp_result = await db.execute(
         select(func.sum(Expense.amount), func.count(Expense.id))
-        .where(func.strftime("%Y", Expense.date) == str(year), Expense.is_depreciable.isnot(True))
+        .where(func.strftime("%Y", Expense.date) == str(year), regular_filter)
     )
     exp_total, exp_count = exp_result.one()
 
+    huisvesting_cond = await huisvesting_filter(db)
+    huisvesting_result = await db.execute(
+        select(func.sum(Expense.amount), func.count(Expense.id))
+        .where(func.strftime("%Y", Expense.date) == str(year), huisvesting_cond)
+    )
+    huisvesting_total, huisvesting_count = huisvesting_result.one()
+
+    dep_result = await db.execute(
+        select(func.sum(Expense.amount), func.count(Expense.id))
+        .where(func.strftime("%Y", Expense.date) == str(year), AFSCHRIJVING_INSTALLMENT_ROW)
+    )
+    dep_total, dep_count = dep_result.one()
+
     inc_total = inc_total or 0.0
     exp_total = exp_total or 0.0
+    huisvesting_total = huisvesting_total or 0.0
+    dep_total = dep_total or 0.0
     return {
         "jaar": year,
         "inkomsten": {"totaal": round(inc_total, 2), "aantal": inc_count or 0},
         "uitgaven": {"totaal": round(exp_total, 2), "aantal": exp_count or 0},
-        "resultaat": round(inc_total - exp_total, 2),
+        "huisvestingskosten": {"totaal": round(huisvesting_total, 2), "aantal": huisvesting_count or 0},
+        "afschrijvingen": {"totaal": round(dep_total, 2), "aantal": dep_count or 0},
+        "resultaat": round(inc_total - exp_total - huisvesting_total - dep_total, 2),
     }
 
 
