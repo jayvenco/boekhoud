@@ -100,6 +100,7 @@ async def scan_overview(request: Request, db: AsyncSession = Depends(get_db)):
         "auto_numbering_enabled": numbering_settings.auto_enabled,
         "uploaded": request.query_params.get("uploaded"),
         "error": request.query_params.get("error"),
+        "default_type": request.query_params.get("type") if request.query_params.get("type") in ("uitgave", "inkomst") else None,
     })
 
 

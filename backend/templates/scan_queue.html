@@ -33,8 +33,8 @@
     <div class="form-group" style="margin:0 0 16px;">
       <label>Type transactie</label>
       <select name="transaction_type" required style="max-width:320px;">
-        <option value="uitgave">Uitgave (bon / factuur)</option>
-        <option value="inkomst">Inkomst (betaalbewijs / factuur)</option>
+        <option value="uitgave" {% if default_type != 'inkomst' %}selected{% endif %}>Uitgave (bon / factuur)</option>
+        <option value="inkomst" {% if default_type == 'inkomst' %}selected{% endif %}>Inkomst (betaalbewijs / factuur)</option>
       </select>
     </div>
 
