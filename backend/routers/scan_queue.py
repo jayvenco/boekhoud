@@ -23,6 +23,7 @@ from backend.services.files import UPLOAD_ROOT, ALLOWED_EXTENSIONS
 from backend.services.invoice_numbering import get_numbering_settings, get_next_invoice_number
 from backend.services.fiscal_year import is_year_locked
 from backend.services.duplicates import compute_hash, find_duplicate
+from backend.services.amounts import parse_amount
 from backend.services.i18n import t
 from backend.routers.incomes import RECEIVED_VIA_OPTIONS, parse_date as parse_date_inc
 
@@ -40,10 +41,7 @@ def _scan_path(filename: str) -> Path:
 def _parse_amount_draft(bedrag: str) -> Optional[float]:
     """Best-effort parse voor het concept-veld — geeft None terug bij een
     ongeldige waarde in plaats van te crashen; de echte validatie gebeurt apart."""
-    try:
-        return float(bedrag.replace(",", "."))
-    except (ValueError, AttributeError):
-        return None
+    return parse_amount(bedrag)
 
 
 async def _category_slug(db: AsyncSession, transaction_type: str, category_id: int) -> Optional[str]:
@@ -118,6 +116,8 @@ async def upload_and_scan(
         return user
 
     SCAN_DIR.mkdir(parents=True, exist_ok=True)
+    cat_model = IncomeCategory if transaction_type == "inkomst" else ExpenseCategory
+    category_slugs = [c.slug for c in (await db.execute(select(cat_model).order_by(cat_model.name))).scalars().all()]
     count = 0
     batch_hashes: dict[str, str] = {}       # hash -> originele bestandsnaam (binnen deze upload)
     batch_invoices: dict[str, str] = {}     # origineel factuurnr -> bestandsnaam (binnen deze upload)
@@ -140,7 +140,7 @@ async def upload_and_scan(
             file_path.write_bytes(content)
 
             try:
-                result = await process_receipt(str(file_path), db)
+                result = await process_receipt(str(file_path), db, transaction_type, category_slugs)
             except Exception as e:
                 logger.error(f"OCR-verwerking mislukt voor '{bestand.filename}': {type(e).__name__}: {e}")
                 result = {"error": f"Uitlezen mislukt ({type(e).__name__}). Vul de gegevens handmatig in."}
@@ -297,11 +297,8 @@ async def approve_item(
         return RedirectResponse("/scan-wachtrij?error=vergrendeld", status_code=302)
 
     # Bedrag
-    try:
-        amount = float(bedrag.replace(",", "."))
-        if amount <= 0:
-            raise ValueError
-    except ValueError:
+    amount = parse_amount(bedrag)
+    if amount is None or amount <= 0:
         return RedirectResponse("/scan-wachtrij?error=bedrag", status_code=302)
 
     # Factuurnummer — volgt onze eigen naming-conventie op basis van het jaartal.

@@ -177,7 +177,7 @@
           <select name="category_id_inc" id="inc-cat-sel-{{ item.id }}" onchange="saveDraft({{ item.id }})">
             {% for cat in inc_cats %}
             <option value="{{ cat.id }}"
-              {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() in cat.slug %}selected{% endif %}>
+              {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() == cat.slug %}selected{% endif %}>
               {{ cat.name }}
             </option>
             {% endfor %}
@@ -191,7 +191,7 @@
           <select name="category_id_exp" id="exp-cat-sel-{{ item.id }}" onchange="saveDraft({{ item.id }})">
             {% for cat in exp_cats %}
             <option value="{{ cat.id }}"
-              {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() in cat.slug %}selected{% endif %}>
+              {% if item.ocr_category_suggestion and item.ocr_category_suggestion.lower() == cat.slug %}selected{% endif %}>
               {{ cat.name }}
             </option>
             {% endfor %}
