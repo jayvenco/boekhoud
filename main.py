@@ -20,6 +20,7 @@ from backend.routers import hours
 from backend.routers import mileage
 from backend.routers import logs as logs_router
 from backend.routers import help as help_router
+from backend.routers import bank_import
 from backend.middleware import SettingsMiddleware
 from backend.services.backup import configure_backup_job
 
@@ -126,6 +127,7 @@ app.include_router(hours.router)
 app.include_router(mileage.router)
 app.include_router(logs_router.router)
 app.include_router(help_router.router)
+app.include_router(bank_import.router)
 
 
 @app.get("/manifest.json")
