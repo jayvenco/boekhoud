@@ -8,6 +8,8 @@ op staging gebouwd en getest, en pas na goedkeuring naar productie gezet.
 automatisch matchen met bestaande inkomsten/uitgaven (of nieuwe boekingen
 aanmaken op basis van de afschriftregels).
 
-**Correctie bulk scan inkomsten/uitgaven** — de AI-scanherkenning voor
-inkomsten en uitgaven verbeteren: nauwkeurigere bedrag-/datum-/
-categorieherkenning, minder handmatige correcties nodig na het scannen.
+~~**Correctie bulk scan inkomsten/uitgaven**~~ — opgelost: Bulk scan onthoudt nu
+het type (Uitgave/Inkomst) op basis van het menu waaruit je 'm opent, de
+bedragparser begrijpt Nederlandse/Engelse notaties correct, en de AI-prompt is
+type-/categorie-bewust met expliciete regels voor totaalbedrag/factuurdatum/
+factuurnummer.
