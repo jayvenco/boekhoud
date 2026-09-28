@@ -10,6 +10,7 @@ import httpx
 
 from backend.services.ai_providers import get_provider
 from backend.services.crypto import decrypt
+from backend.services.amounts import parse_amount
 
 logger = logging.getLogger("boekhoud.ocr")
 
@@ -44,20 +45,60 @@ def extract_text(path: str) -> str:
     return ""
 
 
-EXTRACTION_PROMPT = """Je bent een assistent die bonnen en facturen analyseert.
-Analyseer de volgende tekst van een bon/factuur en extraheer de gegevens.
+EXTRACTION_PROMPT = """Je bent een assistent die {doc_kind} analyseert voor een Nederlandse boekhouding.
+Analyseer de volgende tekst en extraheer de gegevens.
+
+Regels:
+- amount: het TOTAALBEDRAG INCLUSIEF btw dat betaald is of betaald moet worden ("totaal", "te betalen", "totaalbedrag"). Niet een subtotaal, btw-bedrag of bedrag exclusief btw, tenzij dat het enige bedrag is. Geef een getal met punt als decimaalteken, zonder valutasymbool of duizendtalscheiding (bijv. 1234.56).
+- date: de FACTUURDATUM of bondatum, niet de vervaldatum of betaaltermijn. Formaat DD-MM-YYYY.
+- invoice_number: het factuur-/bonnummer zoals de {counterparty} dat heeft afgegeven (niet het klantnummer of IBAN).
+- description: kort (max. 8 woorden): wat is er gekocht/geleverd en door wie.
+- category_suggestion: kies de best passende uit deze lijst, of null als niets past: {category_list}
+- Verzin niets: als een veld niet duidelijk in de tekst staat, gebruik je null.
 
 Tekst:
 {text}
 
 Retourneer ALLEEN een geldig JSON object, geen uitleg, geen markdown, geen backticks:
 {{
-  "invoice_number": "factuurnummer als string of null",
-  "date": "datum in formaat DD-MM-YYYY of null",
-  "amount": getal zonder valutasymbool of null,
-  "description": "korte omschrijving of null",
-  "category_suggestion": "één van: behandelingen, praktijkinrichting, vaste_lasten, abonnementen, materiaal, materieel, marketing, reiskosten, of null"
+  "invoice_number": "string of null",
+  "date": "DD-MM-YYYY of null",
+  "amount": getal of null,
+  "description": "string of null",
+  "category_suggestion": "één van de opgegeven categorieën of null"
 }}"""
+
+DEFAULT_EXPENSE_CATEGORIES = [
+    "praktijkinrichting", "vaste_lasten", "abonnementen", "materiaal", "materieel",
+    "marketing", "reiskosten", "apparatuur", "huisvestingskosten", "overige",
+]
+DEFAULT_INCOME_CATEGORIES = ["behandelingen", "debiteuren"]
+
+MAX_PROMPT_CHARS = 3500
+
+
+def _trim_text(text: str, limit: int = MAX_PROMPT_CHARS) -> str:
+    """Bij lange documenten staan totaalbedragen meestal onderaan. Bewaar daarom
+    het begin (afzender, nummer, datum) én het einde (totalen) in plaats van
+    alleen de eerste N tekens."""
+    if len(text) <= limit:
+        return text
+    head = int(limit * 0.55)
+    tail = limit - head
+    return f"{text[:head]}\n[...]\n{text[-tail:]}"
+
+
+def build_prompt(text: str, transaction_type: str = "uitgave", category_slugs=None) -> str:
+    is_income = transaction_type == "inkomst"
+    slugs = list(category_slugs) if category_slugs else (
+        DEFAULT_INCOME_CATEGORIES if is_income else DEFAULT_EXPENSE_CATEGORIES
+    )
+    return EXTRACTION_PROMPT.format(
+        doc_kind="betaalbewijzen en verkoopfacturen" if is_income else "bonnen en inkoopfacturen",
+        counterparty="klant" if is_income else "leverancier",
+        category_list=", ".join(slugs),
+        text=_trim_text(text),
+    )
 
 
 def clean_json(text: str) -> str:
@@ -68,7 +109,7 @@ def clean_json(text: str) -> str:
     return text.strip()
 
 
-async def analyze_with_openai(text: str) -> dict:
+async def analyze_with_openai(prompt: str) -> dict:
     if not OPENAI_API_KEY:
         return {}
     try:
@@ -79,7 +120,7 @@ async def analyze_with_openai(text: str) -> dict:
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [
-                        {"role": "user", "content": EXTRACTION_PROMPT.format(text=text[:3000])}
+                        {"role": "user", "content": prompt}
                     ],
                     "max_tokens": 500,
                     "temperature": 0,
@@ -93,7 +134,7 @@ async def analyze_with_openai(text: str) -> dict:
         return {"_ai_error": str(e)}
 
 
-async def analyze_with_ollama(text: str) -> dict:
+async def analyze_with_ollama(prompt: str) -> dict:
     if not OLLAMA_BASE_URL:
         return {}
     try:
@@ -103,7 +144,7 @@ async def analyze_with_ollama(text: str) -> dict:
                 json={
                     "model": "llama3.2",
                     "messages": [
-                        {"role": "user", "content": EXTRACTION_PROMPT.format(text=text[:3000])}
+                        {"role": "user", "content": prompt}
                     ],
                     "stream": False,
                 }
@@ -115,7 +156,7 @@ async def analyze_with_ollama(text: str) -> dict:
         return {"_ai_error": str(e)}
 
 
-async def analyze_with_configured_provider(db, text: str) -> dict:
+async def analyze_with_configured_provider(db, prompt: str) -> dict:
     """Gebruikt de in Instellingen gekozen AI-provider/model (database-config)."""
     from sqlalchemy import select
     from backend.models.models import AISettings
@@ -139,7 +180,7 @@ async def analyze_with_configured_provider(db, text: str) -> dict:
 
     model = settings.model or provider.default_model()
     try:
-        content = await provider.complete(api_key, model, EXTRACTION_PROMPT.format(text=text[:3000]))
+        content = await provider.complete(api_key, model, prompt)
         return json.loads(clean_json(content))
     except Exception as e:
         detail = str(e)[:200]
@@ -147,26 +188,33 @@ async def analyze_with_configured_provider(db, text: str) -> dict:
         return {"_ai_error": f"AI-aanvraag mislukt ({type(e).__name__}): {detail}"}
 
 
-async def process_receipt(file_path: str, db=None) -> dict:
+async def process_receipt(file_path: str, db=None, transaction_type: str = "uitgave",
+                          category_slugs=None) -> dict:
     """Extract text and analyze with AI. Returns structured data."""
     text = extract_text(file_path)
     if not text:
         return {"error": "Kon geen tekst extraheren uit het bestand."}
 
+    prompt = build_prompt(text, transaction_type, category_slugs)
     result = {}
     if db is not None:
-        result = await analyze_with_configured_provider(db, text)
+        result = await analyze_with_configured_provider(db, prompt)
     if not result and OPENAI_API_KEY:
-        result = await analyze_with_openai(text)
+        result = await analyze_with_openai(prompt)
     elif not result and OLLAMA_BASE_URL:
-        result = await analyze_with_ollama(text)
+        result = await analyze_with_ollama(prompt)
 
-    # Ensure amount is a float or null
-    if "amount" in result and result["amount"] is not None:
-        try:
-            result["amount"] = float(str(result["amount"]).replace(",", ".").replace("€", "").strip())
-        except Exception:
-            result["amount"] = None
+    # Bedrag naar float (begrijpt ook "1.234,56"); ongeldig → None
+    if "amount" in result:
+        result["amount"] = parse_amount(result["amount"])
+
+    # Alleen een categorie uit de toegestane lijst accepteren — een verzonnen of
+    # verkeerd-type categorie levert anders een stille misser in de selectie op.
+    allowed = {c.lower() for c in category_slugs} if category_slugs else None
+    suggestion = result.get("category_suggestion")
+    if suggestion:
+        suggestion = str(suggestion).strip().lower()
+        result["category_suggestion"] = suggestion if (allowed is None or suggestion in allowed) else None
 
     result["_raw_text"] = text[:500]
     return result

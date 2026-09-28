@@ -378,3 +378,22 @@ class ScanQueue(Base):
     ocr_category_suggestion = Column(String(200), nullable=True)
     ocr_error = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class BankImportLine(Base):
+    """Eén regel uit een geïmporteerd bankafschrift (CSV). status:
+    'nieuw' (nog te beoordelen), 'gematcht' (kwam overeen met een bestaande
+    inkomst/uitgave, puur ter info), 'genegeerd' (bewust overgeslagen) of
+    'geboekt' (heeft een inkomst/uitgave opgeleverd)."""
+    __tablename__ = "bank_import_lines"
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False)
+    description = Column(Text, nullable=True)
+    counterparty = Column(String(255), nullable=True)
+    amount = Column(Float, nullable=False)  # signed: positief = bij (inkomst), negatief = af (uitgave)
+    row_hash = Column(String(64), nullable=False, unique=True)  # duplicaatdetectie tussen imports
+    status = Column(String(20), nullable=False, default="nieuw")
+    matched_type = Column(String(20), nullable=True)  # "inkomst" of "uitgave"
+    matched_id = Column(Integer, nullable=True)
+    source_filename = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

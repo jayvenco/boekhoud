@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Bankrekening import{% endblock %}
+{% block page_title %}Bankrekening import{% endblock %}
+
+{% block topbar_actions %}
+<a href="/bank-import" class="btn btn-outline btn-sm">← Terug naar overzicht</a>
+{% endblock %}
+
+{% block content %}
+{% if error == "leeg" %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Het bestand is leeg.</div>
+{% elif error == "onleesbaar" %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Kon geen gegevens uit dit CSV-bestand lezen. Controleer of het een geldige CSV-export van je bank is.</div>
+{% elif error == "verlopen" %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ De upload is verlopen — upload het bestand opnieuw.</div>
+{% endif %}
+
+<div class="card" style="max-width:640px;">
+  <div class="section-title" style="margin-bottom:6px;">CSV-bestand van je bank uploaden</div>
+  <p style="font-size:13px;color:var(--light-text);margin-bottom:20px;">
+    ING wordt automatisch herkend aan de standaard CSV-export. Andere banken (ABN AMRO,
+    Rabobank, overig) werken ook — je koppelt dan zelf even welke kolom wat betekent,
+    met een voorbeeld erbij zodat je het kunt controleren voordat er iets wordt geïmporteerd.
+  </p>
+  <form method="post" action="/bank-import/upload" enctype="multipart/form-data">
+    <div class="form-group" style="margin-bottom:16px;">
+      <label for="bestand">CSV-bestand</label>
+      <input type="file" name="bestand" id="bestand" accept=".csv,.txt" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Bestand inlezen</button>
+  </form>
+</div>
+{% endblock %}

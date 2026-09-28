@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Bankrekening import{% endblock %}
+{% block page_title %}Bankrekening import{% endblock %}
+
+{% block topbar_actions %}
+<a href="/bank-import/upload" class="btn btn-primary btn-sm">↑ Bankafschrift uploaden</a>
+{% endblock %}
+
+{% block content %}
+{% if uploaded %}
+<div class="alert alert-success" style="margin-bottom:16px;">
+  ✅ {{ uploaded }} regel{% if uploaded|int != 1 %}s{% endif %} ingelezen
+  {% if matched and matched|int > 0 %}— {{ matched }} daarvan kwam(en) al overeen met een bestaande inkomst/uitgave (geen actie nodig){% endif %}.
+  {% if dupe and dupe|int > 0 %}{{ dupe }} regel{% if dupe|int != 1 %}s{% endif %} was al eerder geïmporteerd en {% if dupe|int == 1 %}is{% else %}zijn{% endif %} overgeslagen.{% endif %}
+  {% if invalid and invalid|int > 0 %}{{ invalid }} regel{% if invalid|int != 1 %}s{% endif %} kon niet worden gelezen (ontbrekende datum/bedrag).{% endif %}
+</div>
+{% endif %}
+{% if error == "vergrendeld" %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Boekjaar is afgesloten voor deze datum.</div>
+{% elif error == "categorie" %}
+<div class="alert alert-error" style="margin-bottom:16px;">⚠️ Kies een categorie.</div>
+{% endif %}
+
+{% if gematcht_count %}
+<div class="alert" style="background:var(--green-pale);border:1px solid var(--green-light);color:var(--mid);margin-bottom:16px;">
+  ℹ️ {{ gematcht_count }} eerder geïmporteerde regel{% if gematcht_count != 1 %}s{% endif %} kwam(en) overeen met een bestaande boeking en staat/staan niet in de lijst hieronder.
+</div>
+{% endif %}
+
+{% if not items %}
+<div class="card" style="text-align:center;padding:48px 24px;color:var(--mid);">
+  <div style="font-size:32px;margin-bottom:12px;">🏦</div>
+  <div style="font-weight:600;margin-bottom:6px;">Niets te beoordelen</div>
+  <div style="font-size:13px;">Upload een CSV-export van je bank om nieuwe regels te herkennen.</div>
+</div>
+{% else %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+  <div style="font-weight:600;color:var(--dark);">{{ items|length }} regel{% if items|length != 1 %}s{% endif %} te beoordelen</div>
+</div>
+
+{% for item in items %}
+<div class="card" style="margin-bottom:16px;" id="line-{{ item.id }}">
+  <form method="post" action="/bank-import/{{ item.id }}/boeken">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="font-weight:600;font-size:14px;color:var(--dark);">{{ item.date.strftime('%d-%m-%Y') }}</span>
+        <span class="amount {% if item.amount >= 0 %}amount-positive{% else %}amount-negative{% endif %}" style="margin-left:10px;">
+          € {{ "%.2f"|format(item.amount) }}
+        </span>
+        {% if item.counterparty %}<span style="color:var(--light-text);font-size:13px;margin-left:10px;">{{ item.counterparty }}</span>{% endif %}
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button type="submit" class="btn btn-primary btn-sm">✓ Boeken</button>
+        <button type="button" onclick="ignoreLine({{ item.id }})" class="btn btn-outline btn-sm"
+                style="color:var(--danger);border-color:var(--danger);">✕ Negeren</button>
+      </div>
+    </div>
+    {% if item.description %}
+    <div style="font-size:13px;color:var(--mid);margin-bottom:12px;">{{ item.description }}</div>
+    {% endif %}
+
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+      <div class="form-group" style="margin:0;">
+        <label>Type</label>
+        <select name="transaction_type" id="type-{{ item.id }}" onchange="switchCats({{ item.id }}, this.value)">
+          <option value="inkomst" {% if item.amount >= 0 %}selected{% endif %}>Inkomst</option>
+          <option value="uitgave" {% if item.amount < 0 %}selected{% endif %}>Uitgave</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;" id="inc-cat-{{ item.id }}" {% if item.amount < 0 %}style="display:none;margin:0;"{% endif %}>
+        <label>Categorie (inkomst)</label>
+        <select name="category_id" id="inc-cat-sel-{{ item.id }}">
+          {% for cat in inc_cats %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;" id="exp-cat-{{ item.id }}" {% if item.amount >= 0 %}style="display:none;margin:0;"{% endif %}>
+        <label>Categorie (uitgave)</label>
+        <select name="category_id" id="exp-cat-sel-{{ item.id }}">
+          {% for cat in exp_cats %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Omschrijving</label>
+        <input type="text" name="omschrijving" value="{{ item.description or '' }}" placeholder="Optioneel">
+      </div>
+    </div>
+  </form>
+</div>
+{% endfor %}
+{% endif %}
+
+<script>
+function switchCats(id, type) {
+  const incDiv = document.getElementById('inc-cat-' + id);
+  const expDiv = document.getElementById('exp-cat-' + id);
+  const incSel = document.getElementById('inc-cat-sel-' + id);
+  const expSel = document.getElementById('exp-cat-sel-' + id);
+  if (type === 'inkomst') {
+    incDiv.style.display = ''; expDiv.style.display = 'none';
+    incSel.name = 'category_id'; expSel.removeAttribute('name');
+  } else {
+    incDiv.style.display = 'none'; expDiv.style.display = '';
+    expSel.name = 'category_id'; incSel.removeAttribute('name');
+  }
+}
+function ignoreLine(id) {
+  if (!confirm('Deze regel negeren? Hij verschijnt dan niet meer in de lijst.')) return;
+  const f = document.createElement('form');
+  f.method = 'post';
+  f.action = `/bank-import/${id}/negeren`;
+  document.body.appendChild(f);
+  f.submit();
+}
+// Bij het laden: zorg dat de select zonder 'name' (verborgen categorie) niet meegepost wordt.
+document.querySelectorAll('[id^="type-"]').forEach(sel => switchCats(sel.id.split('-')[1], sel.value));
+</script>
+{% endblock %}
