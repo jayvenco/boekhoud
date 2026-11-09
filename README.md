@@ -16,6 +16,23 @@ Een eenvoudige, lichtgewicht en self-hosted boekhoudapplicatie voor kleine prakt
 - **Database backup** — Met één klik een backup aanmaken
 - **Docker** — Volledig geconfigureerd voor Docker Compose
 
+## 📸 Screenshots
+
+Alle schermafbeeldingen komen uit een demo-omgeving met volledig verzonnen gegevens.
+
+| | |
+|---|---|
+| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Dashboard met donker thema](docs/screenshots/02-dashboard-dracula.png) |
+| **Dashboard** | **Dashboard — 16 thema's, hier Dracula** |
+| ![Inkomsten](docs/screenshots/03-inkomsten.png) | ![Uitgaven met bulkselectie](docs/screenshots/04-uitgaven-bulkselectie.png) |
+| **Inkomsten** | **Uitgaven met bulkselectie** |
+| ![Jaaroverzicht](docs/screenshots/05-jaaroverzicht.png) | ![Rapportages](docs/screenshots/06-rapportages.png) |
+| **Jaaroverzicht** | **Rapportages** |
+| ![Kilometerregistratie](docs/screenshots/07-kilometerregistratie.png) | ![Bulk scan](docs/screenshots/08-bulk-scan.png) |
+| **Kilometerregistratie** | **Bulk scan van bonnen en facturen** |
+| ![Bankimport koppelen](docs/screenshots/09-bankimport-koppelen.png) | ![Bankimport controle](docs/screenshots/10-bankimport-controle.png) |
+| **Bankrekening import — kolommen koppelen** | **Bankrekening import — regels beoordelen** |
+
 ## 🚀 Installatie
 
 ### Vereisten
