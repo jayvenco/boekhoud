@@ -79,6 +79,38 @@ Ga naar: **http://localhost:8000**
 
 ---
 
+## 🖥 Installatie op Unraid
+
+Het project staat in de Unraid Docker-tab met icoon en WebUI-link, en is te beheren met *Edit*, *Check for Updates* en *Apply Update*.
+
+**Installeren of updaten met het script** (idempotent; data blijft behouden):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/main/scripts/install-unraid.sh | bash
+```
+
+Het script maakt de appdata-mappen aan, genereert eenmalig een `SECRET_KEY` (bewaard in `<appdata>/secret_key`, of overgenomen van een bestaande container), haalt het image op, vervangt de container en schrijft het template naar `/boot/config/plugins/dockerMan/templates-user/my-<naam>.xml`. Daarna wacht het op de Docker-healthstatus.
+
+| Variabele | Standaard |
+|---|---|
+| `NAME` | `boekhoud-app` |
+| `TAG` | `latest` |
+| `PORT` | `7777` |
+| `APPDATA` | `/mnt/user/appdata/boekhoud` |
+
+Staging naast productie:
+
+```bash
+NAME=boekhoud-staging TAG=staging PORT=7778 APPDATA=/mnt/user/appdata/boekhoud-staging \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/staging/scripts/install-unraid.sh)"
+```
+
+**Handmatig via template:** plaats [`unraid/boekhoud-app.xml`](unraid/boekhoud-app.xml) in `/boot/config/plugins/dockerMan/templates-user/` en voeg de container toe via *Docker → Add Container*. Vul een eigen `SECRET_KEY` in.
+
+**Updaten:** Docker-tab → *Check for Updates* → *Apply Update*, of het script opnieuw draaien.
+
+---
+
 ## 📁 Mappenstructuur
 
 ```

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>boekhoud-app</Name>
+  <Repository>ghcr.io/jayvenco/boekhoud:latest</Repository>
+  <Registry>https://github.com/jayvenco/boekhoud/pkgs/container/boekhoud</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/jayvenco/boekhoud</Support>
+  <Project>https://github.com/jayvenco/boekhoud</Project>
+  <Overview>Boekhoud App is een eenvoudige boekhouding voor zzp'ers en zorgprofessionals met BTW-vrijstelling. Beheer inkomsten, uitgaven, uren en kilometers, scan bonnen met AI en importeer bankafschriften. Alle gegevens blijven lokaal op je eigen server.</Overview>
+  <Category>Productivity: Other:</Category>
+  <WebUI>http://[IP]:[PORT:5000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/jayvenco/boekhoud/main/unraid/boekhoud-app.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/jayvenco/boekhoud/main/unraid/icon.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <PostArgs/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI-poort" Target="5000" Default="7777" Mode="tcp" Description="Poort waarop de webinterface bereikbaar is." Type="Port" Display="always" Required="true" Mask="false">7777</Config>
+  <Config Name="Data (database)" Target="/app/data" Default="/mnt/user/appdata/boekhoud/data" Mode="rw" Description="Map met de SQLite-database." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/boekhoud/data</Config>
+  <Config Name="Uploads (bonnen)" Target="/app/uploads" Default="/mnt/user/appdata/boekhoud/uploads" Mode="rw" Description="Map met geuploade bonnen en facturen." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/boekhoud/uploads</Config>
+  <Config Name="Back-ups" Target="/app/backups" Default="/mnt/user/appdata/boekhoud/backups" Mode="rw" Description="Map voor automatische back-ups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/boekhoud/backups</Config>
+  <Config Name="Logs" Target="/app/logs" Default="/mnt/user/appdata/boekhoud/logs" Mode="rw" Description="Map met logbestanden." Type="Path" Display="advanced" Required="true" Mask="false">/mnt/user/appdata/boekhoud/logs</Config>
+  <Config Name="SECRET_KEY" Target="SECRET_KEY" Default="" Mode="" Description="VERPLICHT. Lange willekeurige geheime sleutel (bijv. 'openssl rand -hex 32'). Wijzig deze niet achteraf: opgeslagen AI-sleutels en sessies worden dan ongeldig." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="OPENAI_API_KEY" Target="OPENAI_API_KEY" Default="" Mode="" Description="Optioneel: OpenAI API-sleutel voor AI-bonverwerking." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="OLLAMA_BASE_URL" Target="OLLAMA_BASE_URL" Default="" Mode="" Description="Optioneel: URL van een lokale Ollama-instantie, bijv. http://192.168.1.10:11434" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="DATA_DIR" Target="DATA_DIR" Default="/app/data" Mode="" Description="Pad in de container (niet wijzigen)." Type="Variable" Display="advanced-hide" Required="true" Mask="false">/app/data</Config>
+  <Config Name="UPLOAD_DIR" Target="UPLOAD_DIR" Default="/app/uploads" Mode="" Description="Pad in de container (niet wijzigen)." Type="Variable" Display="advanced-hide" Required="true" Mask="false">/app/uploads</Config>
+  <Config Name="BACKUP_DIR" Target="BACKUP_DIR" Default="/app/backups" Mode="" Description="Pad in de container (niet wijzigen)." Type="Variable" Display="advanced-hide" Required="true" Mask="false">/app/backups</Config>
+  <Config Name="LOG_DIR" Target="LOG_DIR" Default="/app/logs" Mode="" Description="Pad in de container (niet wijzigen)." Type="Variable" Display="advanced-hide" Required="true" Mask="false">/app/logs</Config>
+</Container>
