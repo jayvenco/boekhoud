@@ -16,6 +16,23 @@ Een eenvoudige, lichtgewicht en self-hosted boekhoudapplicatie voor kleine prakt
 - **Database backup** — Met één klik een backup aanmaken
 - **Docker** — Volledig geconfigureerd voor Docker Compose
 
+## 📸 Screenshots
+
+Alle schermafbeeldingen komen uit een demo-omgeving met volledig verzonnen gegevens.
+
+| | |
+|---|---|
+| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Dashboard met donker thema](docs/screenshots/02-dashboard-dracula.png) |
+| **Dashboard** | **Dashboard — 16 thema's, hier Dracula** |
+| ![Inkomsten](docs/screenshots/03-inkomsten.png) | ![Uitgaven met bulkselectie](docs/screenshots/04-uitgaven-bulkselectie.png) |
+| **Inkomsten** | **Uitgaven met bulkselectie** |
+| ![Jaaroverzicht](docs/screenshots/05-jaaroverzicht.png) | ![Rapportages](docs/screenshots/06-rapportages.png) |
+| **Jaaroverzicht** | **Rapportages** |
+| ![Kilometerregistratie](docs/screenshots/07-kilometerregistratie.png) | ![Bulk scan](docs/screenshots/08-bulk-scan.png) |
+| **Kilometerregistratie** | **Bulk scan van bonnen en facturen** |
+| ![Bankimport koppelen](docs/screenshots/09-bankimport-koppelen.png) | ![Bankimport controle](docs/screenshots/10-bankimport-controle.png) |
+| **Bankrekening import — kolommen koppelen** | **Bankrekening import — regels beoordelen** |
+
 ## 🚀 Installatie
 
 ### Vereisten
@@ -59,6 +76,37 @@ Ga naar: **http://localhost:8000**
 - Wachtwoord: `admin123`
 
 > ⚠️ **Wijzig het wachtwoord direct na de eerste login!**
+
+---
+
+## 🖥 Installatie op Unraid
+
+Het project staat in de Unraid Docker-tab met icoon en WebUI-link, en is te beheren met *Edit*, *Check for Updates* en *Apply Update*.
+
+**Installeren of updaten met het script** (idempotent; data blijft behouden):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/main/scripts/install-unraid-prod.sh | bash
+```
+
+Er zijn twee scripts (`install-unraid-prod.sh` en `install-unraid-staging.sh`, verder identiek). Ze maken de appdata-mappen aan, genereert eenmalig een `SECRET_KEY` (bewaard in `<appdata>/secret_key`, of overgenomen van een bestaande container), haalt het image op, vervangt de container en schrijft het template naar `/boot/config/plugins/dockerMan/templates-user/my-<naam>.xml`. Daarna wacht het op de Docker-healthstatus.
+
+| Variabele | Standaard |
+|---|---|
+| `NAME` | `boekhoud-app` (staging: `boekhoud-staging`) |
+| `TAG` | `latest` (staging: `staging`) |
+| `PORT` | `7777` (staging: `7778`) |
+| `APPDATA` | `/mnt/user/appdata/boekhoud` (staging: `…/boekhoud-staging`) |
+
+Staging (aparte container `boekhoud-staging`, poort 7778, tag `staging`, eigen appdata en eigen `SECRET_KEY`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/staging/scripts/install-unraid-staging.sh | bash
+```
+
+**Handmatig via template:** plaats [`unraid/boekhoud-app.xml`](unraid/boekhoud-app.xml) in `/boot/config/plugins/dockerMan/templates-user/` en voeg de container toe via *Docker → Add Container*. Vul een eigen `SECRET_KEY` in.
+
+**Updaten:** Docker-tab → *Check for Updates* → *Apply Update*, of het script opnieuw draaien.
 
 ---
 
