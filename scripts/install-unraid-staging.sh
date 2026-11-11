@@ -31,11 +31,13 @@ if [ -s "${SECRET_FILE}" ]; then
   info "Bestaande SECRET_KEY hergebruiken"
 else
   OUD=""
-  if docker inspect "${NAME}" >/dev/null 2>&1; then
+  if [ -n "${SECRET_KEY:-}" ]; then
+    OUD="${SECRET_KEY}"   # expliciet meegegeven sleutel (bijv. de bestaande productiesleutel)
+  elif docker inspect "${NAME}" >/dev/null 2>&1; then
     OUD="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "${NAME}" | sed -n 's/^SECRET_KEY=//p' | head -n1)"
   fi
   if [ -n "${OUD}" ]; then
-    info "SECRET_KEY overnemen van bestaande container"
+    info "SECRET_KEY overnemen (meegegeven of van bestaande container)"
     SECRET="${OUD}"
   else
     info "Nieuwe SECRET_KEY genereren"
