@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Boekhoud App - installeren/updaten op Unraid (idempotent).
-# Gebruik:  curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/main/scripts/install-unraid.sh | bash
+# Boekhoud App PRODUCTIE - installeren/updaten op Unraid (idempotent). Container boekhoud-app, poort 7777, tag latest.
 # Aanpasbaar via omgevingsvariabelen:
 #   NAME (boekhoud-app)  TAG (latest)  PORT (7777)  APPDATA (/mnt/user/appdata/boekhoud)
 #   BRANCH (main; waar template/icoon vandaan komen)  GHCR_USER / GHCR_TOKEN (optioneel docker login)
-# Staging naast productie:
-#   NAME=boekhoud-staging TAG=staging PORT=7778 APPDATA=/mnt/user/appdata/boekhoud-staging bash install-unraid.sh
 set -euo pipefail
 
 NAME="${NAME:-boekhoud-app}"

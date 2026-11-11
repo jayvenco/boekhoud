@@ -86,23 +86,22 @@ Het project staat in de Unraid Docker-tab met icoon en WebUI-link, en is te behe
 **Installeren of updaten met het script** (idempotent; data blijft behouden):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/main/scripts/install-unraid.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/main/scripts/install-unraid-prod.sh | bash
 ```
 
-Het script maakt de appdata-mappen aan, genereert eenmalig een `SECRET_KEY` (bewaard in `<appdata>/secret_key`, of overgenomen van een bestaande container), haalt het image op, vervangt de container en schrijft het template naar `/boot/config/plugins/dockerMan/templates-user/my-<naam>.xml`. Daarna wacht het op de Docker-healthstatus.
+Er zijn twee scripts (`install-unraid-prod.sh` en `install-unraid-staging.sh`, verder identiek). Ze maken de appdata-mappen aan, genereert eenmalig een `SECRET_KEY` (bewaard in `<appdata>/secret_key`, of overgenomen van een bestaande container), haalt het image op, vervangt de container en schrijft het template naar `/boot/config/plugins/dockerMan/templates-user/my-<naam>.xml`. Daarna wacht het op de Docker-healthstatus.
 
 | Variabele | Standaard |
 |---|---|
-| `NAME` | `boekhoud-app` |
-| `TAG` | `latest` |
-| `PORT` | `7777` |
-| `APPDATA` | `/mnt/user/appdata/boekhoud` |
+| `NAME` | `boekhoud-app` (staging: `boekhoud-staging`) |
+| `TAG` | `latest` (staging: `staging`) |
+| `PORT` | `7777` (staging: `7778`) |
+| `APPDATA` | `/mnt/user/appdata/boekhoud` (staging: `…/boekhoud-staging`) |
 
-Staging naast productie:
+Staging (aparte container `boekhoud-staging`, poort 7778, tag `staging`, eigen appdata en eigen `SECRET_KEY`):
 
 ```bash
-NAME=boekhoud-staging TAG=staging PORT=7778 APPDATA=/mnt/user/appdata/boekhoud-staging \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/staging/scripts/install-unraid.sh)"
+curl -fsSL https://raw.githubusercontent.com/jayvenco/boekhoud/staging/scripts/install-unraid-staging.sh | bash
 ```
 
 **Handmatig via template:** plaats [`unraid/boekhoud-app.xml`](unraid/boekhoud-app.xml) in `/boot/config/plugins/dockerMan/templates-user/` en voeg de container toe via *Docker → Add Container*. Vul een eigen `SECRET_KEY` in.
